@@ -1,0 +1,12 @@
+qdrant-client 
+langchain
+langchain_community
+langchain_ollama
+psycopg2-binary 
+sqlalchemy
+langchain-qdrant
+torch 
+torchvision 
+pillow
+opencv-python 
+sentence-transformers
