@@ -10,3 +10,5 @@ torchvision
 pillow
 opencv-python 
 sentence-transformers
+python-dotenv
+dbt-postgres
