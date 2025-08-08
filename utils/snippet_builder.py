@@ -1,4 +1,3 @@
-# utils/snippet_builder.py
 import json
 import os
 from typing import List, Dict
@@ -6,6 +5,7 @@ from tqdm import tqdm
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Table, MetaData, ForeignKey
 from sqlalchemy.inspection import inspect
+from model.qdrant_schema_model import SchemaMetadata, SchemaDoc
 from dotenv import load_dotenv
 load_dotenv(override=True)
 import warnings
@@ -13,17 +13,6 @@ warnings.filterwarnings("ignore")
 
 import logging
 logger = logging.getLogger(__name__)
-
-class SchemaMetadata(BaseModel):
-    table: str
-    fields: List[str]
-    related_tables: List[str]
-
-class SchemaDoc(BaseModel):
-    id: str
-    title: str
-    content: str
-    metadata: SchemaMetadata
 
 class SnippetBuilder:
     def __init__(self, database_uri):
