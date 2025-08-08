@@ -11,6 +11,7 @@ pillow
 opencv-python 
 sentence-transformers
 python-dotenv
-dbt-postgres
-vanna
-'vanna[qdrant,ollama,postgres]'
+# dbt-postgres
+# vanna
+# 'vanna[qdrant,ollama,postgres]'
+langgraph
