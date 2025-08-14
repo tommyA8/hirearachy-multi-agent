@@ -26,6 +26,10 @@ def outline_tool(topic: str) -> List[str]:
     """Make a quick outline"""
     return [f"Intro to {topic}", "Key facts", "Implications", "Conclusion"]
 
+# TODO
+# ต้องทำเริ่ม company_id and project_id ในทุกๆ prompt
+
+
 # ---------- 2) ทีมย่อย (Subgraphs) ----------
 # 2.1 Research Team: ใช้ agent แบบ ReAct + tools
 def build_research_team(model):
