@@ -60,10 +60,14 @@ class SnippetBuilder:
         relationships = []
         related_tables = []
         for fk in self._inspector.get_foreign_keys(table_name=table_name):
-            related_tables.append(f"{fk['referred_table']}")
             relationships.append(
                 f"""{"_".join(fk["name"].split("_")[0:2])}.{fk['constrained_columns'][0]} → {fk['referred_table']}.{fk['referred_columns'][0]}"""
             )
+
+            if fk['referred_table'] in related_tables:
+                continue
+            
+            related_tables.append(f"{fk['referred_table']}")
 
         return relationships, related_tables
         
@@ -95,6 +99,7 @@ class SnippetBuilder:
             metadata=SchemaMetadata(
                 table=table_name,
                 fields=field_names,
+                relationships=relationships,
                 related_tables=related_tables,
             )
         )    
