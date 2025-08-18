@@ -169,7 +169,7 @@ def build_db_query_agent(model: ChatOllama):
                                                 top_k=5, 
                                                 table_context=state.get("table_context", "[]"))
 
-        msgs: List[BaseMessage] = [HumanMessage(content=rendered_system)] + state["messages"]
+        msgs: List[BaseMessage] = [SystemMessage(content=rendered_system)] + state["messages"]
         res = base_agent.invoke({"messages": msgs})
         out_msgs: List[BaseMessage] = res["messages"]
         sql_results = out_msgs[-1].content if out_msgs else ""
@@ -327,8 +327,7 @@ if __name__ == "__main__":
 
     # Example streaming run
     for step in app.stream(
-        {"messages": [{"role": "user", "content": "รายชื่อสมาชิกคนล่าสุด"
-                    #    "What is first name and joined date of newest user?"
+        {"messages": [{"role": "user", "content": "What is first name and joined date of newest user?"
                        }]},
         stream_mode="values",
         config=RUN_CONFIG
