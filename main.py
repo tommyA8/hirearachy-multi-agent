@@ -178,7 +178,7 @@ class HierarchicalAgent(AgentNodes):
 
         return False
     
-    def build(self, save_graph=False):
+    def build(self, checkpointer, save_graph=False):
         g = StateGraph(MainState)
 
         g.add_node("router_node", self.router_node)
@@ -202,7 +202,7 @@ class HierarchicalAgent(AgentNodes):
         g.add_edge("database_node", "help_desk_with_permission_node")
         g.add_edge("help_desk_with_permission_node", END)
 
-        self.agent = g.compile()
+        self.agent = g.compile(checkpointer=checkpointer)
 
         if save_graph:
             self.save_graph()
@@ -217,33 +217,51 @@ class HierarchicalAgent(AgentNodes):
             print("Saved graph diagram to graph.png")
         except Exception as e:
             print(f"Could not render graph diagram: {e}")
-            
-graph = HierarchicalAgent()
 
-# Setting the agent's model
-graph.help_desk = ChatOllama(model="qwen3:0.6b", temperature=0.1)
-graph.router = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-graph.database = ChatOllama(model="qwen3:1.7b", temperature=0.1)
 
-# Building the agent
-# Add memory
-memory = MemorySaver()
-agent = graph.build(save_graph=True, checkpointer=memory)
+def chat_with_agent():
+    graph = HierarchicalAgent()
+
+    # Setting the agent's model
+    graph.help_desk = ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    graph.router = ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    graph.database = ChatOllama(model="qwen3:1.7b", temperature=0.1)
+
+    # Building the agent
+    memory = MemorySaver()
+    agent = graph.build(checkpointer=memory, save_graph=False)
+
+    while True:
+        question = input("#> ")
+        out = agent.invoke({
+            "messages": [HumanMessage(content=question)], 
+            "user": UserContext(user_id=1, company_id=1, project_id=1)
+        }, 
+        config={"configurable": {"thread_id": "demo-user-001"}}
+        )
+        print("Agent: ", out["messages"][-1].content)
+
 
 if __name__ == "__main__":
+    chat_with_agent()
+    # question = "Hello, My name is Bob, What's latest document code of submittal"
+    #"What's latest document code of submittal"
 
-    question = "What's latest document code of submittal"
-    for step in agent.stream(
-        {"messages": [HumanMessage(content=question)],
-        "user": UserContext(user_id=1, 
-                            company_id=1, 
-                            project_id=1)},
-        stream_mode="values",
-        # recursion_limit=100
-    ):
-        step["messages"][-1].pretty_print()
-
-    # res = app.invoke({"messages": [HumanMessage(content="Get me a latest reject Work Order?")],
-    #                   "user": UserContext(user_id=1, company_id=1, project_id=1)})
+    # demo(question)
+    # for step in agent.stream(
+    #     {"messages": [HumanMessage(content=question)],
+    #     "user": UserContext(user_id=1, 
+    #                         company_id=1, 
+    #                         project_id=1)},
+    #     stream_mode="values",
+    #     config=cfg,
+    #     # recursion_limit=100
+    # ):
+    #     step["messages"][-1].pretty_print()
+    
+    # res = agent.invoke({
+    #     "messages": [HumanMessage(content=question)],
+    #     "user": UserContext(user_id=1, company_id=1, project_id=1),
+    # }, config=cfg)
     # print(res)
     
