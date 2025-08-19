@@ -5,12 +5,15 @@ import warnings
 from dotenv import load_dotenv
 load_dotenv(override=True)
 warnings.filterwarnings("ignore")
+from typing import TypedDict
 
 from langgraph.graph import MessagesState
 from langchain_ollama import ChatOllama
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langgraph.graph.message import add_messages
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, BaseMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import create_react_agent
+from langchain_core.output_parsers import StrOutputParser
 
 ## SQL
 from sqlalchemy import create_engine, MetaData, Table, select, bindparam, text
@@ -50,57 +53,53 @@ class DBState(RetrieveState):
     sql_results: List
 
 class MainState(DBState):
-    final_answer: str
+    pass
+
 
 # Build sub agents/teams
 def help_desk_team(model: ChatOllama):
     def help_desk_node(state: MainState):
-        
+        # # get latest user question from the running conversation
+        # last_user = next((m for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), None)
+        # question = (last_user.content if last_user else "").strip()
+
         try:
             if state["permission"] == "valid":
-                prompt = """
-                Your name is ChatCM.
-                You are a polite and helpful help desk of a construction management (CM) system.
-                
-                You are given the SQL results and a question.
-                Your job is to answer with a short answer.
+                system = SystemMessage(content=(
+                    "Your name is ChatCM.\n"
+                    "You are a helpful, concise, and polite help desk for a CM system.\n"
+                    "You are given the SQL results and a question.\n"
+                    f"SQL Results: \n{state["sql_results"]}"
+                    "Your job is to answer with a short answer.\n"
+                    "REMEMBER DO NOT Explain why error occurs."
+                    "Always use prior conversation context if helpful. Keep answers SHORT.\n"
 
-                REMEMBER DO NOT Explain why error occurs.
-
-                question: {question}
-                """
-
-                prompt += f"SQL Results: \n{state["sql_results"]}"
+                ))
 
             else:
-                prompt = """
-                Your name is ChatCM.
-                You are a polite and helpful help desk of a construction management (CM) system.
-                Your job is to answer with a short answer to a given questions.
+                system = SystemMessage(content=(
+                    "Your name is ChatCM.\n"
+                    "You are a helpful, concise, and polite help desk for a CM system.\n"
+                    "Your job is to answer with a short answer.\n"
+                    "REMEMBER User does not have permission to ask question related to this feature."
+                    "You MUST NOT answer the question and give a reason to the user."
+                    "Always use prior conversation context if helpful. Keep answers SHORT.\n"
 
-                REMEMBER
-                User does not have permission to ask question related to this feature.
-
-                You MUST NOT answer the question and give a reason to the user.
-                question: {question}
-                """
+                ))
    
         except:
-            prompt = """
-            Your name is ChatCM.
-            You are a polite and helpful help desk of a construction management (CM) system.
-            Your job is to answer with a short answer to a given questions following instructions.
-            instructions:
-            - Construction Management (CM) questions
-            - Greetings
-            - Introduce yourself
-            
-            DO NOT ANSWER questions that are not related to Construction Management (CM).
-            question: {question}
-            """
+            system = SystemMessage(content=(
+                "Your name is ChatCM.\n"
+                "You are a helpful, concise, and polite help desk for a CM system.\n"
+                "Always use prior conversation context if helpful. Keep answers SHORT."
+                "You can only answer questions related to Construction Management (CM), greetings, or goodbyes and about yourself.\n"
+            ))
+        
+        # invoke the chat model correctly with a list of messages
+        response = model.invoke(state["messages"] + [system])
 
-        response = model.invoke(prompt.format(question=state["messages"][0].content))
-        ai_msg = AIMessage(content=response.content.split("</think>\n")[-1])
+        ai_msg = AIMessage(content=response.content)
+        # ai_msg = AIMessage(content=response.content.split("</think>\n")[-1])
         return {
             "messages": [ai_msg],
         }
