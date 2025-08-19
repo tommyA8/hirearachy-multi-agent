@@ -15,3 +15,5 @@ python-dotenv
 # vanna
 # 'vanna[qdrant,ollama,postgres]'
 langgraph
+fastapi
+uvicorn
