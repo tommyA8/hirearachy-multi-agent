@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import os
 import uuid
 import time
 from typing import Any, Dict, Optional
@@ -14,8 +14,15 @@ from langchain_ollama import ChatOllama
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
 
+from agent_hub import *
 from main import HierarchicalAgent
-from utils.model_state import UserContext
+from model.state_model import UserContext
+
+POSTGRES_URI = os.getenv("POSTGRES_URI")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
+LLM_MODEL = os.getenv("LLM_MODEL")
+EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
 
 # ----- FastAPI models -----
 class ChatSession(BaseModel):
@@ -41,17 +48,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Build the agent ONCE, keep shared memory across requests
-memory = MemorySaver()
-graph = HierarchicalAgent()
-graph.help_desk = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-graph.router = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-graph.database = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-agent = graph.build(checkpointer=memory, save_graph=False)
+def init_agent():
+    graph = HierarchicalAgent()
+    # Setting up the nodes
+    graph.router = RouterTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    )
+    graph.help_desk = ConversationTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    )
+    graph.database = DatabaseTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
+        db_uri=POSTGRES_URI
+    )
+    graph.research = ResearchTeams(
+        model=ChatOllama(model="sqlcoder:7b", temperature=0.1), 
+        qdrant_url=QDRANT_URL, 
+        collection_name=QDRANT_COLLECTION_NAME, 
+        embeded_model_nam=EMBEDED_MODEL_NAME
+    )
+    # Building the agent
+    memory = MemorySaver()
+    return graph.build(checkpointer=memory)
 
 def make_thread_id(s: ChatSession) -> str:
     # Deterministic per user/company/project unless overridden
     return s.thread_id if s.thread_id else str(uuid.uuid4())
+
+agent = init_agent()
 
 @app.get("/healthz")
 def healthz():

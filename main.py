@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
+from utils.is_valid_tool_permission import is_valid_tool_permission
 from model.state_model import *
 from agent_hub import RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
 
@@ -59,11 +60,11 @@ class HierarchicalAgent:
 
     def router_node(self, state: MainState):
         res = self._router.invoke({"messages": state["messages"], 
-                                "user": state["user"]})
+                                   "user": state["user"]})
         return {
             "messages": res["messages"],
             "tool": res["tool"], 
-            "selected_reason": res["selected_reason"]
+            "tool_selected_reason": res["tool_selected_reason"]
         }
     
     def help_desk_node(self, state: MainState):
@@ -72,20 +73,11 @@ class HierarchicalAgent:
             })
 
         return {"messages": res["messages"]}
-    
-    def help_desk_with_permission_node(self, state: MainState):
-        res = self._help_desk.invoke({
-            "messages": state["messages"],
-            "permission": state["permission"],
-            "sql_results": state["sql_results"]
-            })
-
-        return {"messages": res["messages"]}
 
     def research_node(self, state: MainState):
         res = self._research.invoke({"messages": state["messages"], 
                                      "tool": state["tool"],
-                                     "selected_reason": state["selected_reason"]})
+                                     "tool_selected_reason": state["tool_selected_reason"]})
         
         return {
             "messages": res["messages"],
@@ -106,7 +98,7 @@ class HierarchicalAgent:
         return "related_to_cm"
 
     def _permission_node(self, state: MainState):
-        valid = self._is_valid_tool_permission(user_id=state["user"].user_id, 
+        valid = is_valid_tool_permission(user_id=state["user"].user_id, 
                                                company_id=state["user"].company_id, 
                                                project_id=state["user"].project_id, 
                                                tool_title=state["tool"].value)
@@ -115,53 +107,6 @@ class HierarchicalAgent:
             "messages": [ai_msg],
             "permission": "valid" if valid else "not_valid"
         }
-        
-    def _is_valid_tool_permission(self, user_id: int, company_id: int, project_id: int, tool_title: str) -> bool:
-        """
-        Check if the user has permission to use a specific tool.
-        """
-        params = {
-            "user_id": user_id,
-            "company_id": company_id,
-            "project_id": project_id,
-            "tool_title": tool_title,
-        }
-
-        a   = Table("auth_user", metadata, schema="public", autoload_with=engine)
-        cu  = Table("company_companyuser", metadata, schema="public", autoload_with=engine)
-        c   = Table("company_company", metadata, schema="public", autoload_with=engine)
-        pu  = Table("project_projectuser", metadata, schema="public", autoload_with=engine)
-        p   = Table("project_project", metadata, schema="public", autoload_with=engine)
-        cp  = Table("company_permission", metadata, schema="public", autoload_with=engine)
-        cpg = Table("company_permissiongroup", metadata, schema="public", autoload_with=engine)
-        tl  = Table("company_toollabels", metadata, schema="public", autoload_with=engine)
-
-        stmt = (
-            select(tl.c.title).distinct()
-            .select_from(
-                a
-                .join(cu, a.c.id == cu.c.user_id)
-                .join(c, c.c.id == cu.c.company_id)
-                .join(pu, a.c.id == pu.c.user_id)
-                .join(p, p.c.id == pu.c.project_id)
-                .join(cp, cp.c.id == pu.c.permission_id)
-                .join(cpg, cpg.c.permission_id == pu.c.permission_id)
-                .join(tl, tl.c.id == cpg.c.tool_id)
-            )
-            .where(
-                a.c.id == bindparam("user_id"),
-                c.c.id == bindparam("company_id"),
-                p.c.id == bindparam("project_id"),
-                tl.c.title == bindparam("tool_title"),
-            )
-        )
-
-        with engine.connect() as conn:
-            res = conn.execute(stmt, params).scalars().all()
-            if res:
-                return True
-
-        return False
     
     def build(self, checkpointer, save_graph=False):
         g = StateGraph(MainState)
@@ -170,7 +115,6 @@ class HierarchicalAgent:
         g.add_node("help_desk_node", self.help_desk_node)
         g.add_node("research_node", self.research_node)
         g.add_node("database_node", self.database_node)
-        g.add_node("help_desk_with_permission_node", self.help_desk_with_permission_node)
         
         g.add_edge(START, "router_node")
         g.add_conditional_edges(
@@ -180,11 +124,11 @@ class HierarchicalAgent:
         g.add_conditional_edges(
             "check_permission_node",
             lambda s: s["permission"],
-            {"valid": "research_node", "not_valid": "help_desk_with_permission_node"},
+            {"valid": "research_node", "not_valid": "help_desk_node"},
         )
         g.add_edge("research_node", "database_node")
-        g.add_edge("database_node", "help_desk_with_permission_node")
-        g.add_edge("help_desk_with_permission_node", END)
+        g.add_edge("database_node", "help_desk_node")
+        g.add_edge("help_desk_node", END)
         self.agent = g.compile(checkpointer=checkpointer)
 
         if save_graph:
@@ -195,7 +139,7 @@ class HierarchicalAgent:
     def save_graph(self):
         try:
             png_bytes = self.agent.get_graph().draw_mermaid_png()
-            with open("graph.png", "wb") as f:
+            with open("chatcm_agentic_graph.png", "wb") as f:
                 f.write(png_bytes)
             print("Saved graph diagram to graph.png")
         except Exception as e:
@@ -225,17 +169,21 @@ def chat_with_agent():
 
     # Building the agent
     memory = MemorySaver()
-    agent = graph.build(checkpointer=memory, save_graph=False)
+    agent = graph.build(checkpointer=memory, save_graph=True)
 
     while True:
         question = input("#> ")
-        out = agent.invoke({
-            "messages": [HumanMessage(content=question)], 
-            "user": UserContext(user_id=1, company_id=1, project_id=1)
-        }, 
-        config={"configurable": {"thread_id": "demo-user-001"}}
-        )
-        print("Agent: ", out["messages"][-1].content)
+        # out = agent.invoke({
+        #     "messages": [HumanMessage(content=question)], 
+        #     "user": UserContext(user_id=1, company_id=1, project_id=1)
+        # }, 
+        # config={"configurable": {"thread_id": "demo-user-001"}}
+        # )
+        for step in agent.stream({"messages": [HumanMessage(content=question)], "user": UserContext(user_id=1, company_id=1, project_id=1)}, 
+                                 stream_mode="values", 
+                                 config={"configurable": {"thread_id": "demo-user-001"}}):
+            
+            step["messages"][-1].pretty_print()
 
 
 if __name__ == "__main__":

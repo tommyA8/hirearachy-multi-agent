@@ -29,7 +29,7 @@ class ResearchTeams:
         payload = {
             "question": human_question[-1].content,
             "tool": state["tool"].value,
-            "selected_reason": state["selected_reason"]
+            "tool_selected_reason": state["tool_selected_reason"]
         }
 
         text_to_embed = json.dumps(payload, ensure_ascii=False)

@@ -1,4 +1,5 @@
 
+import os
 import uuid
 from langchain_community.callbacks.streamlit import (
     StreamlitCallbackHandler,
@@ -10,8 +11,16 @@ from langchain import hub
 from langchain_ollama import ChatOllama
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
+
+from agent_hub import *
 from main import HierarchicalAgent
-from utils.model_state import UserContext
+from model.state_model import UserContext
+
+POSTGRES_URI = os.getenv("POSTGRES_URI")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
+LLM_MODEL = os.getenv("LLM_MODEL")
+EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
 
 def ensure_defaults():
     if "thread_id" not in st.session_state:
@@ -41,16 +50,30 @@ project_id = st.sidebar.number_input("project_id", min_value=1, value=1, step=1)
 
 @st.cache_resource(show_spinner=False)
 def build_agent_once():
-    # Persistent checkpointer
-    cp = MemorySaver()
-    #SQLiteSaver.from_conn_string("checkpoints.db")
-
     graph = HierarchicalAgent()
-    graph.help_desk = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-    graph.router    = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-    graph.database  = ChatOllama(model="sqlcoder:7b", temperature=0)
 
-    agent = graph.build(checkpointer=cp, save_graph=False)
+    # Setting up the nodes
+    graph.router = RouterTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    )
+    graph.help_desk = ConversationTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    )
+    graph.database = DatabaseTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
+        db_uri=POSTGRES_URI
+    )
+    graph.research = ResearchTeams(
+        model=ChatOllama(model="sqlcoder:7b", temperature=0.1), 
+        qdrant_url=QDRANT_URL, 
+        collection_name=QDRANT_COLLECTION_NAME, 
+        embeded_model_nam=EMBEDED_MODEL_NAME
+    )
+
+    # Building the agent
+    memory = MemorySaver()
+    agent = graph.build(checkpointer=memory)
+
     return agent
 
 agent = build_agent_once()

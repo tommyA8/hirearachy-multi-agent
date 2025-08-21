@@ -1,5 +1,5 @@
 import enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 from langgraph.graph import MessagesState
 
@@ -27,7 +27,7 @@ class Tools(enum.Enum):
 class RoutingDecision(BaseModel):
     question: str
     tool: Tools
-    selected_reason: str
+    tool_selected_reason: str
 
 class UserContext(BaseModel):
     user_id: int
@@ -40,11 +40,11 @@ class SQLGenerator(BaseModel):
     
 class RouterState(MessagesState):
     tool: Tools
-    selected_reason: str
+    tool_selected_reason: str
 
 class PermissionsState(RouterState):
     user: UserContext
-    permission: str = "not_valid"
+    permission: str
 
 class RetrieveState(PermissionsState):
     relavant_context: str
