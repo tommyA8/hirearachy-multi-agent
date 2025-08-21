@@ -5,21 +5,13 @@ from langchain_community.callbacks.streamlit import (
 )
 import streamlit as st
 from langchain import hub
-from langchain.agents import AgentExecutor, create_react_agent, load_tools
+# from langchain.agents import AgentExecutor, create_react_agent, load_tools
 # ----- your agent bits (unchanged) -----
 from langchain_ollama import ChatOllama
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
 from main import HierarchicalAgent
 from utils.model_state import UserContext
-
-# Build the agent ONCE, keep shared memory across requests
-memory = MemorySaver()
-graph = HierarchicalAgent()
-graph.help_desk = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-graph.router = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-graph.database = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-agent = graph.build(checkpointer=memory, save_graph=False)
 
 def ensure_defaults():
     if "thread_id" not in st.session_state:
@@ -33,79 +25,62 @@ def ensure_defaults():
 
 ensure_defaults()
 
-# ----------------------------
-# Sidebar: รับ thread_id + context
-# ----------------------------
-st.sidebar.header("Session / Thread")
-col1, col2 = st.sidebar.columns([3, 1])
+st.sidebar.image("assets/logo_siteAround-sm.svg")
 
-with col1:
-    thread_id_input = st.text_input(
-        "Thread ID",
-        value=st.session_state.thread_id,
-        help="กำหนดรหัส thread ที่จะใช้กับ Memory/Checkpoint ของ Agent",
-        key="thread_id_text",
-    )
-with col2:
-    if st.button("Random"):
-        st.session_state.thread_id = f"session-{uuid.uuid4().hex[:8]}"
-        st.session_state.thread_id_text = st.session_state.thread_id
-        st.rerun()
+# ---- Thread & user context UI (stable across reruns) ----
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = f"session-{uuid.uuid4().hex[:8]}"
 
-# Sync ค่าจาก text_input -> session_state
-st.session_state.thread_id = thread_id_input.strip() or st.session_state.thread_id
+st.sidebar.header("Session")
+st.session_state.thread_id = st.sidebar.text_input("thread_id", st.session_state.thread_id)
 
-st.sidebar.header("User Context")
-st.session_state.user_id = st.sidebar.number_input("user_id", min_value=1, value=st.session_state.user_id, step=1)
-st.session_state.company_id = st.sidebar.number_input("company_id", min_value=1, value=st.session_state.company_id, step=1)
-st.session_state.project_id = st.sidebar.number_input("project_id", min_value=1, value=st.session_state.project_id, step=1)
+user_id    = st.sidebar.number_input("user_id",    min_value=1, value=1, step=1)
+company_id = st.sidebar.number_input("company_id", min_value=1, value=1, step=1)
+project_id = st.sidebar.number_input("project_id", min_value=1, value=1, step=1)
 
-# st.sidebar.caption(
-#     "คำแนะนำ: ใช้รูปแบบเช่น "
-#     f"`user:{st.session_state.user_id}|company:{st.session_state.company_id}|project:{st.session_state.project_id}` "
-#     "เพื่อผูกความจำกับผู้ใช้/โปรเจ็กต์"
-# )
 
-# ----------------------------
-# ส่วนสนทนา
-# ----------------------------
-st.title("Agent Chat")
+@st.cache_resource(show_spinner=False)
+def build_agent_once():
+    # Persistent checkpointer
+    cp = MemorySaver()
+    #SQLiteSaver.from_conn_string("checkpoints.db")
 
-# แสดงข้อความแชตที่ค้างไว้ (ถ้ามี)
+    graph = HierarchicalAgent()
+    graph.help_desk = ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    graph.router    = ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    graph.database  = ChatOllama(model="sqlcoder:7b", temperature=0)
+
+    agent = graph.build(checkpointer=cp, save_graph=False)
+    return agent
+
+agent = build_agent_once()
+
+
+# Display-only UI history (optional)
 if "history" not in st.session_state:
     st.session_state.history = []
 
 for role, content in st.session_state.history:
     st.chat_message(role).write(content)
 
-
-if prompt := st.chat_input():
+if prompt := st.chat_input("Type your message"):
     st.session_state.history.append(("user", prompt))
     st.chat_message("user").write(prompt)
 
     with st.chat_message("assistant"):
-        st_callback = StreamlitCallbackHandler(st.container())
-
-        # Single invoke. Put callbacks & thread_id in the config dict.
+        cb = StreamlitCallbackHandler(st.container())
         response = agent.invoke(
             {
                 "messages": [HumanMessage(content=prompt)],
-                "user": UserContext(user_id=1, company_id=1, project_id=1),
+                "user": UserContext(user_id=user_id, company_id=company_id, project_id=project_id),
             },
             config={
-                "callbacks": [st_callback],
-                "configurable": {"thread_id": "streamlit-test"},
+                "callbacks": [cb],
+                # 👇 This must stay the same to reuse memory
+                "configurable": {"thread_id": st.session_state.thread_id},
             },
         )
 
-        # Safely extract the final text
-        if isinstance(response, dict) and "messages" in response and response["messages"]:
-            answer = response["messages"][-1].content.split("</think>\n")[-1]
-            
-        elif isinstance(response, dict) and "output" in response:
-            # some executors return "output"
-            answer = response["output"]
-        else:
-            answer = str(response)
-
+        answer = answer = response["messages"][-1].content.split("</think>\n")[-1]
         st.write(answer)
+        st.session_state.history.append(("assistant", answer))

@@ -1,11 +1,6 @@
 import enum
-import warnings
 from pydantic import BaseModel
-
-from dotenv import load_dotenv
-load_dotenv(override=True)
-warnings.filterwarnings("ignore")
-
+from typing import List
 from langgraph.graph import MessagesState
 
 class Tools(enum.Enum):
@@ -32,31 +27,32 @@ class Tools(enum.Enum):
 class RoutingDecision(BaseModel):
     question: str
     tool: Tools
-    reasoning: str
+    selected_reason: str
 
 class UserContext(BaseModel):
     user_id: int
     company_id: int
     project_id: int
 
-class SQLResponse(BaseModel):
-    sql_query: str
-    sql_results: str
+class SQLGenerator(BaseModel):
+    query: str
+    note: str
     
-# Define states
 class RouterState(MessagesState):
     tool: Tools
-    reasoning: str
+    selected_reason: str
 
 class PermissionsState(RouterState):
-    user_ctx: UserContext
-    tool_permission: bool
+    user: UserContext
+    permission: str = "not_valid"
 
 class RetrieveState(PermissionsState):
     relavant_context: str
 
 class DBState(RetrieveState):
     generated_sql: str
+    evaluated_sql: str
+    sql_results: List
 
-class MainState(RetrieveState):
-    final_answer: str
+class MainState(DBState):
+    pass

@@ -1,48 +1,29 @@
-from abc import ABC, abstractmethod
+import os
 from dotenv import load_dotenv
 load_dotenv(override=True)
 import warnings
 warnings.filterwarnings("ignore")
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from utils.agents import *
+from model.state_model import *
+from agent_hub import RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
 
-class AgentNodes(ABC):
+POSTGRES_URI = os.getenv("POSTGRES_URI")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
+LLM_MODEL = os.getenv("LLM_MODEL")
+EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
 
-    @abstractmethod
-    def router_node(self, ):
-        pass
-
-    @abstractmethod
-    def help_desk_node(self, ):
-        pass
-
-    @abstractmethod
-    def permission_node(self, ):
-        pass
-
-    @abstractmethod
-    def is_related_to_cm_node(self, ):
-        pass
-
-    @abstractmethod
-    def retrieval_node(self, ):
-        pass
-
-    @abstractmethod
-    def database_node(self, ):
-        pass
-
-class HierarchicalAgent(AgentNodes):
+class HierarchicalAgent:
     def __init__(self):
         self._agent = None
         self._help_desk = None
         self._router = None
         self._database = None
-        self._retrieval = retrieval_team()
+        self._research = None
 
     @property
     def help_desk(self):
@@ -53,25 +34,38 @@ class HierarchicalAgent(AgentNodes):
         return self._router
     
     @property
-    def retrieval(self):
-        return self._retrieval
-    
-    @property
     def database(self):
         return self._database
     
-    @help_desk.setter
-    def help_desk(self, model: ChatOllama):
-        self._help_desk = help_desk_team(model)
-
+    @property
+    def research(self):
+        return self._research
+    
     @router.setter
-    def router(self, model: ChatOllama):
-        self._router = router_team(model)
+    def router(self, graph: RouterTeams):
+        self._router = graph.build()
+    
+    @help_desk.setter
+    def help_desk(self, graph: ConversationTeams):
+        self._help_desk = graph.build()
     
     @database.setter
-    def database(self, model: ChatOllama):
-        self._database = database_team(model)
+    def database(self, graph: DatabaseTeams):
+        self._database = graph.build()
 
+    @research.setter
+    def research(self, graph: ResearchTeams):
+        self._research = graph.build()
+
+    def router_node(self, state: MainState):
+        res = self._router.invoke({"messages": state["messages"], 
+                                "user": state["user"]})
+        return {
+            "messages": res["messages"],
+            "tool": res["tool"], 
+            "selected_reason": res["selected_reason"]
+        }
+    
     def help_desk_node(self, state: MainState):
         res = self._help_desk.invoke({
             "messages": state["messages"],
@@ -88,17 +82,8 @@ class HierarchicalAgent(AgentNodes):
 
         return {"messages": res["messages"]}
 
-    def router_node(self, state: MainState):
-        res = self._router.invoke({"messages": state["messages"], 
-                                "user": state["user"]})
-        return {
-            "messages": res["messages"],
-            "tool": res["tool"], 
-            "selected_reason": res["selected_reason"]
-        }
-    
-    def retrieval_node(self, state: MainState):
-        res = self._retrieval.invoke({"messages": state["messages"], 
+    def research_node(self, state: MainState):
+        res = self._research.invoke({"messages": state["messages"], 
                                      "tool": state["tool"],
                                      "selected_reason": state["selected_reason"]})
         
@@ -115,12 +100,12 @@ class HierarchicalAgent(AgentNodes):
         return {"messages": res["messages"], 
                 "sql_results": res["sql_results"]}
 
-    def is_related_to_cm_node(self, state: MainState):
+    def _is_related_to_cm_node(self, state: MainState):
         if state['tool'] == Tools.UNKNOWN:
             return "not_related_to_cm"
         return "related_to_cm"
 
-    def permission_node(self, state: MainState):
+    def _permission_node(self, state: MainState):
         valid = self._is_valid_tool_permission(user_id=state["user"].user_id, 
                                                company_id=state["user"].company_id, 
                                                project_id=state["user"].project_id, 
@@ -129,7 +114,7 @@ class HierarchicalAgent(AgentNodes):
         return {
             "messages": [ai_msg],
             "permission": "valid" if valid else "not_valid"
-            }
+        }
         
     def _is_valid_tool_permission(self, user_id: int, company_id: int, project_id: int, tool_title: str) -> bool:
         """
@@ -180,28 +165,26 @@ class HierarchicalAgent(AgentNodes):
     
     def build(self, checkpointer, save_graph=False):
         g = StateGraph(MainState)
-
         g.add_node("router_node", self.router_node)
-        g.add_node("check_permission_node", self.permission_node)
+        g.add_node("check_permission_node", self._permission_node)
         g.add_node("help_desk_node", self.help_desk_node)
-        g.add_node("retrieval_node", self.retrieval_node)
+        g.add_node("research_node", self.research_node)
         g.add_node("database_node", self.database_node)
         g.add_node("help_desk_with_permission_node", self.help_desk_with_permission_node)
         
         g.add_edge(START, "router_node")
         g.add_conditional_edges(
             "router_node", 
-            self.is_related_to_cm_node, 
+            self._is_related_to_cm_node, 
             {"related_to_cm": "check_permission_node", "not_related_to_cm": "help_desk_node"})
         g.add_conditional_edges(
             "check_permission_node",
             lambda s: s["permission"],
-            {"valid": "retrieval_node", "not_valid": "help_desk_with_permission_node"},
+            {"valid": "research_node", "not_valid": "help_desk_with_permission_node"},
         )
-        g.add_edge("retrieval_node", "database_node")
+        g.add_edge("research_node", "database_node")
         g.add_edge("database_node", "help_desk_with_permission_node")
         g.add_edge("help_desk_with_permission_node", END)
-
         self.agent = g.compile(checkpointer=checkpointer)
 
         if save_graph:
@@ -222,10 +205,23 @@ class HierarchicalAgent(AgentNodes):
 def chat_with_agent():
     graph = HierarchicalAgent()
 
-    # Setting the agent's model
-    graph.help_desk = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-    graph.router = ChatOllama(model="qwen3:1.7b", temperature=0.1)
-    graph.database = ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    # Setting up the nodes
+    graph.router = RouterTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    )
+    graph.help_desk = ConversationTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+    )
+    graph.database = DatabaseTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
+        db_uri=POSTGRES_URI
+    )
+    graph.research = ResearchTeams(
+        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
+        qdrant_url=QDRANT_URL, 
+        collection_name=QDRANT_COLLECTION_NAME, 
+        embeded_model_nam=EMBEDED_MODEL_NAME
+    )
 
     # Building the agent
     memory = MemorySaver()
@@ -244,24 +240,3 @@ def chat_with_agent():
 
 if __name__ == "__main__":
     chat_with_agent()
-    # question = "Hello, My name is Bob, What's latest document code of submittal"
-    #"What's latest document code of submittal"
-
-    # demo(question)
-    # for step in agent.stream(
-    #     {"messages": [HumanMessage(content=question)],
-    #     "user": UserContext(user_id=1, 
-    #                         company_id=1, 
-    #                         project_id=1)},
-    #     stream_mode="values",
-    #     config=cfg,
-    #     # recursion_limit=100
-    # ):
-    #     step["messages"][-1].pretty_print()
-    
-    # res = agent.invoke({
-    #     "messages": [HumanMessage(content=question)],
-    #     "user": UserContext(user_id=1, company_id=1, project_id=1),
-    # }, config=cfg)
-    # print(res)
-    
