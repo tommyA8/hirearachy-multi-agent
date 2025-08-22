@@ -62,15 +62,23 @@ class QdrantVector:
             docs = json.load(f)
         return docs
     
-    def get_relavant_context(self, q: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def get_relavant_context(self, q: str, key: str, value: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Retrieve top-5 relevant payloads from Qdrant for the user's question."""
-
         resp = self.client.query_points(
             collection_name=self.collection_name,
             query=self.embedder.embed_query(q),
             search_params=models.SearchParams(hnsw_ef=128, exact=False),
             limit=limit,
+            query_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key=key, 
+                        match=models.MatchText(text=value)  # substring match
+                    ),
+                ],
+            )
         )
+
         return [pt.payload for pt in resp.points]
     
     def filter_payload(self, key: str, value: str) -> List[Dict[str, Any]]:
