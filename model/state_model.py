@@ -8,7 +8,6 @@ class Tools(enum.Enum):
     SUBMITTAL = "Submittal"
     RFI = "RFI"
     INSPECTION = "Inspection"
-    UNKNOWN = "Unknown"
     KANBAN = "Kanban"
     DIRECTORY = "Directory"
     TRANSMITTAL = "Transmittal"
@@ -22,12 +21,13 @@ class Tools(enum.Enum):
     TAG = "Tag"
     WORK_ORDER_GROUP = "Work Order Group"
     MEETING = "Meeting"
+    UNKNOWN = "Unknown"
 
 # Define models
 class RoutingDecision(BaseModel):
     question: str
     tool: Tools
-    tool_selected_reason: str
+    # tool_selected_reason: str
 
 class UserContext(BaseModel):
     user_id: int
@@ -36,11 +36,10 @@ class UserContext(BaseModel):
 
 class SQLGenerator(BaseModel):
     query: str
-    note: str
     
 class RouterState(MessagesState):
     tool: Tools
-    tool_selected_reason: str
+    # tool_selected_reason: str
 
 class PermissionsState(RouterState):
     user: UserContext
@@ -53,6 +52,7 @@ class DBState(RetrieveState):
     generated_sql: str
     evaluated_sql: str
     sql_results: List
+    sql_error: str 
 
 class MainState(DBState):
     pass

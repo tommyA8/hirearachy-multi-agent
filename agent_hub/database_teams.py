@@ -1,5 +1,5 @@
 from langchain_ollama import ChatOllama
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 
 # Model
@@ -32,6 +32,11 @@ class DatabaseTeams:
         g.add_edge(START, "generate_node")
         g.add_edge("generate_node", "evaluate_node")
         g.add_edge("evaluate_node", "execute_node")
+        # g.add_conditional_edges(
+        #     "execute_node",
+        #     lambda s: s["sql_error"],
+        #     {"error": "generate_node", "not_error": END},
+        # )
         g.add_edge("execute_node", END)
         return g.compile()
 
@@ -100,7 +105,7 @@ class DatabaseTeams:
                                         table_context=state['relavant_context'],
                                         question=human_question[-1].content)
         
-        res = self.sql_model.invoke(rendered_system)
+        res = self.sql_model.invoke(state["messages"] + [SystemMessage(content=rendered_system)])
 
         return {
             "messages": [AIMessage(content="SQL Query Generated.")], 
@@ -109,10 +114,10 @@ class DatabaseTeams:
 
     def evaluate_sql(self, state: DBState):
         prompt = """
-        You are given a SQL query and a list of relevant tables and their relationships.
+        You are given a SQL query and a list of tables, fields and their relationships.
         You MUST TO evaluate the provided SQL query, check for existence of columns and tables and correctness of the query.
         
-        Finally, Generate a correct, clear, and readable SQL query.
+        Finally, GENERATE A CORRECT, clear, and readable SQL query.
         
         Evaluated SQLQuery: <Evaluated SQLQuery>
 
@@ -126,8 +131,10 @@ class DatabaseTeams:
         {relationships}
         """
 
+        table_fields = "\n".join([f"Table:{tbl['table']}\n Fields: {tbl['fields']}" for tbl in state["relavant_context"]])
+
         rendered_system = prompt.format(query=state["generated_sql"],
-                                        relevant_tables=state["relavant_context"],
+                                        relevant_tables=table_fields,
                                         relationships=state["relavant_context"][0]['relationships'])
 
         res = self.sql_model.invoke(rendered_system)
@@ -142,7 +149,11 @@ class DatabaseTeams:
 
         if not sql.lower().startswith("select"):
             print(f"Refusing to execute non-SELECT SQL: {sql}")
-            raise ValueError("Refusing to execute non-SELECT SQL.")
+            # raise ValueError("Refusing to execute non-SELECT SQL.")
+            return {
+                "messages": [AIMessage(content="Refusing to execute non-SELECT SQL.")],
+                "sql_error": "error"
+            }
         
         if " limit " not in sql.lower():
             sql += " LIMIT 50"
@@ -154,9 +165,16 @@ class DatabaseTeams:
 
         tool_out = query_tool.invoke({"query": sql})  # returns a string with rows/preview
 
+        if "error" in tool_out.lower():
+            return {
+                "messages": [AIMessage(content="SQL execution failed.")], 
+                "sql_error": "error"
+            }
+
         return {
-            "messages": [AIMessage(content="SQL executed via SQLDatabaseToolkit.")], 
-            "sql_results": tool_out
+            "messages": [AIMessage(content="SQL executed via SQLDatabaseToolkit.\n" + tool_out)], 
+            "sql_error": "not_error",
+            # "sql_results": tool_out
         }
     
     def _get_query_tool(self, tool_map):
