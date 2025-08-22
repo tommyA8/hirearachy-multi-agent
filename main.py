@@ -64,7 +64,7 @@ class HierarchicalAgent:
         return {
             "messages": res["messages"],
             "tool": res["tool"], 
-            "tool_selected_reason": res["tool_selected_reason"]
+            # "tool_selected_reason": res["tool_selected_reason"]
         }
     
     def help_desk_node(self, state: MainState):
@@ -77,7 +77,8 @@ class HierarchicalAgent:
     def research_node(self, state: MainState):
         res = self._research.invoke({"messages": state["messages"], 
                                      "tool": state["tool"],
-                                     "tool_selected_reason": state["tool_selected_reason"]})
+                                    #  "tool_selected_reason": state["tool_selected_reason"]
+                                     })
         
         return {
             "messages": res["messages"],
@@ -89,8 +90,10 @@ class HierarchicalAgent:
                                      "user": state["user"],
                                      "relavant_context": state["relavant_context"]})
 
-        return {"messages": res["messages"], 
-                "sql_results": res["sql_results"]}
+        return {
+            "messages": res["messages"], 
+            # "sql_results": res["sql_results"]
+        }
 
     def _is_related_to_cm_node(self, state: MainState):
         if state['tool'] == Tools.UNKNOWN:
@@ -110,15 +113,15 @@ class HierarchicalAgent:
     
     def build(self, checkpointer, save_graph=False):
         g = StateGraph(MainState)
-        g.add_node("router_node", self.router_node)
+        g.add_node("tool_classification_node", self.router_node)
         g.add_node("check_permission_node", self._permission_node)
         g.add_node("help_desk_node", self.help_desk_node)
         g.add_node("research_node", self.research_node)
         g.add_node("database_node", self.database_node)
         
-        g.add_edge(START, "router_node")
+        g.add_edge(START, "tool_classification_node")
         g.add_conditional_edges(
-            "router_node", 
+            "tool_classification_node", 
             self._is_related_to_cm_node, 
             {"related_to_cm": "check_permission_node", "not_related_to_cm": "help_desk_node"})
         g.add_conditional_edges(
@@ -151,17 +154,16 @@ def chat_with_agent():
 
     # Setting up the nodes
     graph.router = RouterTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+        model=ChatOllama(model="qwen3:4b", temperature=0.1)
     )
     graph.help_desk = ConversationTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+        model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
     )
     graph.database = DatabaseTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
+        model=ChatOllama(model="sqlcoder:7b", temperature=0), 
         db_uri=POSTGRES_URI
     )
     graph.research = ResearchTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
         qdrant_url=QDRANT_URL, 
         collection_name=QDRANT_COLLECTION_NAME, 
         embeded_model_nam=EMBEDED_MODEL_NAME
