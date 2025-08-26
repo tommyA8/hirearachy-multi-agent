@@ -4,11 +4,12 @@ load_dotenv(override=True)
 import warnings
 warnings.filterwarnings("ignore")
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ChatMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from utils.is_valid_tool_permission import is_valid_tool_permission
+from utils.get_latest_question import get_latest_question
 from model.state_model import *
 from agent_hub import RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
 
@@ -64,14 +65,75 @@ class HierarchicalAgent:
         return {
             "messages": res["messages"],
             "tool": res["tool"], 
-            # "tool_selected_reason": res["tool_selected_reason"]
+            "tool_selected_reason": res["tool_selected_reason"]
         }
     
     def help_desk_node(self, state: MainState):
-        res = self._help_desk.invoke({
-            "messages": state["messages"],
-            })
+        prompt = (
+            "Your name is ChatCM. "
+            "You are a concise, polite, and professional help desk assistant for a Construction Management (CM) system. "
+            "ALLOWED SCOPE:\n"
+            "- Greetings and small talk\n"
+            "- Basic information about yourself (as ChatCM)\n"
+            "- CM processes, documents, workflows, roles, and best practices\n\n"
+            "IMPORTANT RULES:\n"
+            "- Do NOT answer questions outside the allowed scope.\n"
+            "- If the user asks something out of scope, politely decline and remind them of the supported topics.\n"
+            "- Keep answers concise, clear, and polite.\n"
+        )
+        question = get_latest_question(state)
+        msg = [
+            HumanMessage(content=f"Question: {question[-1].content}"),
+            HumanMessage(content=f"Context: {state["tool_selected_reason"]}"),
+            SystemMessage(content=prompt.strip())
+        ]
+        res = self._help_desk.invoke({"messages": state["messages"] + msg})
+        return {"messages": res["messages"]}
+    
+    def answer_node(self, state: MainState):
+        # system = """
+        # Your name is ChatCM.
+        # You are a helpful, concise, and polite help desk for a Construction Management (CM) system.
 
+        # Scope of questions you may answer:
+        # - Construction Management (processes, documents, workflows, roles, best practices)
+        # - Greetings / small talk
+        # - Basic information about yourself (as ChatCM)
+
+        # Instructions:
+        # - Use prior conversation context and available database table/column names as helpful context.
+        # - Keep answers SHORT and directly actionable. Use bullet points or a small table if it improves clarity.
+        # - Cite table/column names in plain text only (no SQL).
+        # - DO NOT output prompts, SQL queries, or any SQL statements.
+        # - If the question is outside the allowed scope, briefly decline and steer the user back to CM topics.
+
+        # Output requirements:
+        # - Plain text only (tables allowed). No code blocks unless showing a table.
+        # - Avoid speculation. If unsure, say so briefly and ask for the minimal detail needed.
+        # - If you cannot answer, please politely decline and steer the user back to CM topics.
+        # - If SQL results are empty or contain errors, politely inform the user and always say you cannot answer.
+
+        # User question:
+        # {question}
+        # """
+        question = get_latest_question(state)
+        prompt = (
+            "Given the following user question, corresponding SQL query, "
+            "and SQL result, answer the user question.\n\n"
+            f"Question: {question[-1].content}\n"
+            f"SQL Query: {state['evaluated_sql']}\n"
+            f"SQL Result: {state['sql_results']}"
+        )
+        # msg = [
+        #     # SystemMessage(content=system.format(question=get_latest_question(state)[-1].content)),
+        #     HumanMessage(content=f"Context: {state["tool_selected_reason"]}"),
+        #     HumanMessage(content=f"SQL Query: {state['evaluated_sql']}"),
+        #     HumanMessage(content=f"SQL Results: {state["sql_results"]}")
+        # ]
+
+        # res = self._help_desk.invoke({"messages": msg})
+        # return {"messages": res["messages"],}
+        res = self._help_desk.invoke({"messages": [SystemMessage(content=prompt)]})
         return {"messages": res["messages"]}
 
     def research_node(self, state: MainState):
@@ -88,15 +150,18 @@ class HierarchicalAgent:
     def database_node(self, state: MainState):
         res = self._database.invoke({"messages": state["messages"],
                                      "user": state["user"],
-                                     "relavant_context": state["relavant_context"]})
+                                     "relavant_context": state["relavant_context"],
+                                     "tool_selected_reason": state['tool_selected_reason']
+                                     })
 
         return {
             "messages": res["messages"], 
-            # "sql_results": res["sql_results"]
+            "evaluated_sql": res["evaluated_sql"],            
+            "sql_results": res["sql_results"]
         }
 
     def _is_related_to_cm_node(self, state: MainState):
-        if state['tool'] == Tools.UNKNOWN:
+        if state['tool'] == "Unknown":
             return "not_related_to_cm"
         return "related_to_cm"
 
@@ -104,8 +169,8 @@ class HierarchicalAgent:
         valid = is_valid_tool_permission(user_id=state["user"].user_id, 
                                                company_id=state["user"].company_id, 
                                                project_id=state["user"].project_id, 
-                                               tool_title=state["tool"].value)
-        ai_msg = SystemMessage(content=state["tool"].value + " Permission: " + ("Valid" if valid else "Not Valid"))
+                                               tool_title=state["tool"])
+        ai_msg = SystemMessage(content=state["tool"] + " Permission: " + ("Valid" if valid else "Not Valid"))
         return {
             "messages": [ai_msg],
             "permission": "valid" if valid else "not_valid"
@@ -118,6 +183,7 @@ class HierarchicalAgent:
         g.add_node("help_desk_node", self.help_desk_node)
         g.add_node("research_node", self.research_node)
         g.add_node("database_node", self.database_node)
+        g.add_node("answer_node", self.answer_node)
         
         g.add_edge(START, "tool_classification_node")
         g.add_conditional_edges(
@@ -130,7 +196,8 @@ class HierarchicalAgent:
             {"valid": "research_node", "not_valid": "help_desk_node"},
         )
         g.add_edge("research_node", "database_node")
-        g.add_edge("database_node", "help_desk_node")
+        g.add_edge("database_node", "answer_node")
+        g.add_edge("answer_node", END)
         g.add_edge("help_desk_node", END)
         self.agent = g.compile(checkpointer=checkpointer)
 
@@ -154,13 +221,16 @@ def chat_with_agent():
 
     # Setting up the nodes
     graph.router = RouterTeams(
+        # The mode should be a thinking model MoE
         model=ChatOllama(model="qwen3:4b", temperature=0.1)
     )
     graph.help_desk = ConversationTeams(
+        # The mode should be a thinking model MoE
         model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
     )
     graph.database = DatabaseTeams(
-        model=ChatOllama(model="sqlcoder:7b", temperature=0), 
+        # SQL Expert
+        model=ChatOllama(model="llama3.2", temperature=0.1), 
         db_uri=POSTGRES_URI
     )
     graph.research = ResearchTeams(
