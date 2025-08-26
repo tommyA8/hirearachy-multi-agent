@@ -22,26 +22,33 @@ class RouterTeams:
         return g.compile()
 
     def tool_classification(self, state: RouterState):
-        prompt = """
-        You are a Costruction Management expert.\n
-        You are an expert in Construction Management\n.
-        Analyze the user query below and determine its Available Construction Management 'Tools' with deeply reason.
-
-        If you are not sure about the tools, please respond with 'Unknown'.
-
-        Tools:
-        {tools}
-        """
-
+        prompt = (
+        "You are a Construction Management (CM) domain expert. "
+        "You are given a user question and must decide which CM tool (if any) is most relevant. "
+        "Follow these rules step by step:\n"
+        "1. Identify what the user is asking for (the core intent).\n"
+        "2. Determine if the question is related to Construction Management.\n"
+        "3. If related, decide which CM tool best fits the question.\n"
+        "   - If no tool clearly applies, respond with 'Unknown'.\n\n"
+        "Available Tools: {tools}\n"
+        "User Question: {question}\n\n"
+        "Your response must include:\n"
+        "- The chosen tool from the list or 'Unknown'.\n"
+        "- A short reasoning.\n"
+        "- Justification based on Construction Management business logic.\n"
+        )
+        
         agent = self.model.with_structured_output(RoutingDecision)
 
         question = get_latest_question(state)
-        # decision = agent.invoke(prompt.format(question=question[-1].content))
-        decision = agent.invoke(state['messages'] + [SystemMessage(content=prompt.format(tools=tools))])
+        question = question[-1].content
 
+        decision = agent.invoke(state['messages'] + [SystemMessage(content=prompt.format(question=question, tools=tools))])
+
+        ai_msg = AIMessage(content=f"{decision.tool.value} Tool is most related to user's question.")
         return {
-            "messages": [AIMessage(content=f"LLM Router decided: {decision.tool.value}")],
-            "tool": decision.tool,
-            # "tool_selected_reason": decision.tool_selected_reason,
+            "messages": [ai_msg],
+            "tool": decision.tool.value,
+            "tool_selected_reason": decision.tool_selected_reason,
         }
 
