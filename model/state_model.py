@@ -27,7 +27,7 @@ class Tools(enum.Enum):
 class RoutingDecision(BaseModel):
     question: str
     tool: Tools
-    # tool_selected_reason: str
+    tool_selected_reason: str
 
 class UserContext(BaseModel):
     user_id: int
@@ -39,7 +39,7 @@ class SQLGenerator(BaseModel):
     
 class RouterState(MessagesState):
     tool: Tools
-    # tool_selected_reason: str
+    tool_selected_reason: str
 
 class PermissionsState(RouterState):
     user: UserContext
