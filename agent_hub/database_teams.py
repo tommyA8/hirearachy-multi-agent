@@ -1,28 +1,80 @@
+from __future__ import annotations
+
+import re
+from typing import Any, Dict
+
 from langchain_ollama import ChatOllama
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
+from langgraph.types import Command
+from sqlalchemy import create_engine
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_community.agent_toolkits.sql.base import SQLDatabaseToolkit
 
-# Model
+
 from model.state_model import DBState, SQLGenerator
-
-# Utils
 from utils.get_latest_question import get_latest_question
 
-## SQL
-from sqlalchemy import create_engine
-from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits import SQLDatabaseToolkit
+# ----- Small helpers -----
+_SELECT_REGEX = re.compile(r"^\s*select\b", re.IGNORECASE)
+_LIMIT_REGEX = re.compile(r"\blimit\s+\d+\b", re.IGNORECASE)
 
+def _ensure_limit(sql: str, default_limit: int) -> str:
+    """Append LIMIT if not present; leaves existing LIMIT/OFFSET untouched."""
+    if not _LIMIT_REGEX.search(sql):
+        sql = sql.rstrip().rstrip(";")
+        sql = f"{sql} LIMIT {int(default_limit)}"
+    return sql
+
+def _is_select(sql: str) -> bool:
+    return bool(_SELECT_REGEX.match(sql or ""))
 
 class DatabaseTeams:
-    def __init__(self, model: ChatOllama, db_uri: str):
+    def __init__(self,
+        model: ChatOllama,
+        db_uri: str,
+        dialect: str = "postgresql",
+        default_top_k: int = 5,
+        default_limit: int = 50
+    ):  
         self.model = model
         self.sql_model = model.with_structured_output(SQLGenerator)
 
-        self._engine = create_engine(db_uri)
-        self.db = SQLDatabase(engine=self._engine) #SQLDatabase.from_engine(self.engine)  # or SQLDatabase.from_uri("postgresql+psycopg://...")
-        self.toolkit = SQLDatabaseToolkit(db=self.db, llm=self.model)
+        self.dialect = dialect
+        self.default_top_k = int(default_top_k)
+        self.default_limit = int(default_limit)
 
+        # DB + toolkit
+        self._engine = create_engine(db_uri)
+        self.db = SQLDatabase(engine=self._engine)
+        self.toolkit = SQLDatabaseToolkit(db=self.db, llm=self.model)
+        self.db_tools = self.toolkit.get_tools()
+        self.db_tool_map = {t.name: t for t in self.db_tools}
+
+        # Validate required tools up-front (fail fast)
+        missing = [k for k in ("sql_db_query", "sql_db_query_checker") if k not in self.db_tool_map]
+        if missing:
+            raise RuntimeError(f"Required SQL tools not available: {missing}")
+        
+        # Static prompt template (lean + explicit)
+        self._prompt_tmpl = (
+            "You are a {dialect} expert. Given the question, context, and table relationships, "
+            "produce a syntactically correct {dialect} SQL query that answers the question.\n"
+            "Rules:\n"
+            "- Unless a specific number of rows is requested, limit to {top_k} rows.\n"
+            "- Never select *; only include necessary columns. Wrap each column name in double quotes.\n"
+            "- Use only columns/tables shown below; ensure column-table correctness.\n"
+            "- Use date('now') to refer to the current date if the question involves 'today'.\n\n"
+            "Use this format:\n"
+            "Question: <question>\n"
+            "SQLQuery: <query>\n"
+            "Answer: <short natural-language answer to expect>\n\n"
+            "Only use the following tables:\n{tables}\n\n"
+            "Table relationships:\n{relationships}\n\n"
+            "Context:\n{tool_context}\n\n"
+            "Question: {question}\n"
+        )
+        
     def build(self):
         g = StateGraph(DBState)
         g.add_node("generate_node", self.generate_sql)
@@ -40,150 +92,105 @@ class DatabaseTeams:
         g.add_edge("execute_node", END)
         return g.compile()
 
-    def generate_sql(self, state: DBState):
-        prompt = """
-        You are a careful, read-only data analyst agent that interacts with a SQL database.
-
-        GOAL
-        - Given the user's question, produce a syntactically correct {dialect} query, execute it, and summarize the result succinctly.
-        - Default to at most {top_k} rows unless the user asks for a different limit.
-
-        SCOPE & SAFETY
-        - READ-ONLY ONLY. Absolutely NO DML/DDL: INSERT, UPDATE, DELETE, MERGE, DROP, TRUNCATE, CREATE, ALTER, GRANT, REVOKE.
-        - Use only the tables and columns provided in `TABLE CONTEXT`. If something is missing, say so rather than guessing.
-        - Prefer parameterized predicates for sensitive values (e.g., :company_id, :project_id).
-        - Avoid full scans when possible. Use WHERE, appropriate ORDER BY, and LIMIT.
-        - Never SELECT *; only select columns needed to answer the question.
-        - Assume timezone = {{"Asia/Bangkok"}} unless the question specifies otherwise. Be explicit about which timestamp you consider authoritative (e.g., created_at vs updated_at).
-
-        DISAMBIGUATION HEURISTICS
-        - "latest", "newest": order by the most relevant timestamp (prefer business-complete time > created_at > updated_at), DESC, LIMIT {top_k}.
-        - "count", "how many": return an aggregate (COUNT(*)) and any requested breakdowns (GROUP BY).
-        - Ranges like "last 7 days" are relative to the current time in the assumed timezone.
-        - If the wording remains too ambiguous to write a safe query, ask one short clarifying question before proceeding.
-
-        QUERY STYLE
-        - Use fully-qualified table names if schemas are present.
-        - Use clear column aliases and CTEs for readability when helpful.
-        - When joining, use explicit JOIN ... ON with keys implied by names (e.g., *_id) or described in `TABLE CONTEXT`.
-        - For text search, use functions supported by {dialect} only if listed in `TABLE CONTEXT` (avoid vendor-specific features unless certain).
-        - When returning "top" records, specify deterministic ORDER BY.
-
-        VALIDATION
-        - Double-check syntax and table/column names against `TABLE CONTEXT` before execution.
-        - If execution fails, correct the query and retry once with a brief explanation of the fix.
-
-        OUTPUT FORMAT
-        Return your work in exactly this structure:
-
-        REMEMBER When generate SQLQuery, You have to validate the avaliable columns and tables from `TABLE CONTEXT`
-
-        Question: <copy the user question>
-        Assumptions: <only if you had to assume/clarify anything; keep to one short sentence>
-        SQLQuery:
-        <the final SQL to run (read-only, parameterized where appropriate)>
-        SQLResult: <result rows or a compact aggregate preview (max {top_k} rows)>
-        Answer: <one-sentence answer in plain language, citing key numbers and timeframes>
-
-        USER CONTEXT
-        Company ID: {company_id}
-        Project ID: {project_id}
-
-        TABLE CONTEXT 
-        {table_context}
-
-        Question:
-        {question}
-        """
+    def generate_sql(self, state: DBState) -> Dict[str, Any]:
+        question = get_latest_question(state)
+        tool_context = str(state.get("tool_selected_reason", "")).strip() or "None."
+        tables_block = "\n".join([f"Table:{tbl['table']}\n Fields: {tbl['fields']}" for tbl in state["relavant_context"]]) 
+        relationships_block = state["relavant_context"][0]['relationships']
         
-        human_question = get_latest_question(state)
+        rendered = self._prompt_tmpl.format(
+            dialect=self.dialect,
+            top_k=self.default_top_k,
+            tables=tables_block,
+            relationships=relationships_block,
+            tool_context=tool_context,
+            question=question[-1].content,
+        )
 
-        rendered_system = prompt.format(dialect='postgresql', 
-                                        top_k=5,
-                                        company_id=state["user"].company_id,
-                                        project_id=state["user"].project_id,
-                                        table_context=state['relavant_context'],
-                                        question=human_question[-1].content)
-        
-        res = self.sql_model.invoke(state["messages"] + [SystemMessage(content=rendered_system)])
+        try:
+            rendered = [SystemMessage(content=rendered)]
+            res = self.sql_model.invoke(rendered)
+            generated_sql = (res.query or "").strip()
 
-        return {
-            "messages": [AIMessage(content="SQL Query Generated.")], 
-            "generated_sql": res.query
-        }
-
-    def evaluate_sql(self, state: DBState):
-        prompt = """
-        You are given a SQL query and a list of tables, fields and their relationships.
-        You MUST TO evaluate the provided SQL query, check for existence of columns and tables and correctness of the query.
-        
-        Finally, GENERATE A CORRECT, clear, and readable SQL query.
-        
-        Evaluated SQLQuery: <Evaluated SQLQuery>
-
-        SQLQuery:
-        {query}
-
-        Relevant tables:
-        {relevant_tables}
-
-        Table relationships:
-        {relationships}
-        """
-
-        table_fields = "\n".join([f"Table:{tbl['table']}\n Fields: {tbl['fields']}" for tbl in state["relavant_context"]])
-
-        rendered_system = prompt.format(query=state["generated_sql"],
-                                        relevant_tables=table_fields,
-                                        relationships=state["relavant_context"][0]['relationships'])
-
-        res = self.sql_model.invoke(rendered_system)
-
-        return {
-            "messages": [AIMessage(content="SQL Query Evaluated.")], 
-            "evaluated_sql": res.query
-        }
-
-    def execute_sql(self, state: DBState):
-        sql = state["evaluated_sql"] # sql = state.get("evaluated_sql").strip().rstrip(";")
-
-        if not sql.lower().startswith("select"):
-            print(f"Refusing to execute non-SELECT SQL: {sql}")
-            # raise ValueError("Refusing to execute non-SELECT SQL.")
+        except Exception as e:
+            # Fail closed with a clear message in state
             return {
-                "messages": [AIMessage(content="Refusing to execute non-SELECT SQL.")],
-                "sql_error": "error"
-            }
-        
-        if " limit " not in sql.lower():
-            sql += " LIMIT 50"
-
-        tools_list = self.toolkit.get_tools()
-        tool_map = {t.name: t for t in tools_list}
-
-        query_tool = self._get_query_tool(tool_map)
-
-        tool_out = query_tool.invoke({"query": sql})  # returns a string with rows/preview
-
-        if "error" in tool_out.lower():
-            return {
-                "messages": [AIMessage(content="SQL execution failed.")], 
-                "sql_error": "error"
+                "messages": [AIMessage(content=f"Failed to generate SQL: {e}")],
+                "generated_sql": "",
+                "sql_error": "error",
             }
 
         return {
-            "messages": [AIMessage(content="SQL executed via SQLDatabaseToolkit.\n" + tool_out)], 
-            "sql_error": "not_error",
-            # "sql_results": tool_out
+            "messages": [AIMessage(content="SQL Query Generated.")],
+            "generated_sql": generated_sql,
         }
     
-    def _get_query_tool(self, tool_map):
-        preferred = ["query_sql_db", "sql_db_query", "sql_db_query_tool"]
-        for name in preferred:
-            if name in tool_map:
-                return tool_map[name]
-        # fallback: fuzzy match
-        for name in tool_map:
-            if "query" in name and "sql_db" in name:
-                return tool_map[name]
-        raise KeyError(f"No SQL query tool found. Available: {list(tool_map)}")
+    def evaluate_sql(self, state: DBState) -> Dict[str, Any]:
+        query = (state.get("generated_sql") or "").strip()
+        if not query:
+            return {
+                "messages": [AIMessage(content="No SQL to evaluate.")],
+                "evaluated_sql": "",
+                "sql_error": "error",
+            }
+
+        try:
+            checker = self.db_tool_map["sql_db_query_checker"]
+            checked_sql = checker.invoke({"query": query})
+
+        except Exception as e:
+            return {
+                "messages": [AIMessage(content=f"SQL evaluation failed: {e}")],
+                "evaluated_sql": "",
+                "sql_error": "error",
+            }
+
+        return {
+            "messages": [AIMessage(content="SQL Query Evaluated.")],
+            "evaluated_sql": checked_sql,
+        }
+
+    def execute_sql(self, state: DBState) -> Dict[str, Any]:
+        sql = (state.get("evaluated_sql") or "").strip()
+        if not sql:
+            return {
+                "messages": [AIMessage(content="No SQL to execute.")],
+                "sql_results": "",
+                "sql_error": "error",
+            }
+
+        # Enforce SELECT-only
+        if not _is_select(sql):
+            return {
+                "messages": [AIMessage(content="Refusing to execute non-SELECT SQL.")],
+                "sql_results": "",
+                "sql_error": "error",
+            }
+
+        # Ensure LIMIT if absent
+        sql = _ensure_limit(sql, self.default_limit)
+
+        try:
+            runner = self.db_tool_map["sql_db_query"]
+            res = runner.invoke({"query": sql})
+            res_txt = str(res)
+
+            if "error" in res_txt.lower():
+                return {
+                    "messages": [AIMessage(content="SQL execution failed.")],
+                    "sql_results": res_txt,
+                    "sql_error": "error",
+                }
+        except Exception as e:
+            return {
+                "messages": [AIMessage(content=f"SQL execution crashed: {e}")],
+                "sql_results": "",
+                "sql_error": "error",
+            }
+
+        return {
+            "messages": [AIMessage(content="SQL executed.")],
+            "evaluated_sql": sql,
+            "sql_results": res_txt,
+            "sql_error": "not_error",
+        }
