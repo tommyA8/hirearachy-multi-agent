@@ -30,18 +30,18 @@ class ResearchTeams:
         # Get The Most Relevant Context 
         relevant_cntx = self.qdrant.get_relavant_context(q=human_question[-1].content, 
                                                          key='table', 
-                                                         value=state['tool'].value.lower(), 
+                                                         value=state['tool'].lower(), 
                                                          limit=1)
 
         # Get The Related Tables to {table}
-        for table in relevant_cntx[0]['related_tables']:
+        for table in relevant_cntx[-1]['related_tables']:
             relationship = self.qdrant.filter_payload(key="table", value=table)
             relevant_cntx.append(relationship[0])
 
         # related_tables = "\n".join([(tbl['table'], tbl['fields']) for tbl in relevant_cntx])
         # table_cntx = "\n".join([f"{tbl['table']}: {tbl['fields']}" for tbl in relevant_cntx])
 
-        sys_msg = SystemMessage(content=f"Retrieved Relevant {state['tool'].value}")
+        sys_msg = SystemMessage(content=f"Retrieved Relevant {state['tool']}")
         
         return {
             "messages": [sys_msg],
