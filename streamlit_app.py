@@ -54,17 +54,16 @@ def build_agent_once():
 
     # Setting up the nodes
     graph.router = RouterTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+        model=ChatOllama(model="qwen3:4b", temperature=0.1)
     )
     graph.help_desk = ConversationTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1)
+        model=ChatOllama(model="deepseek-r1:1.5b", temperature=0)
     )
     graph.database = DatabaseTeams(
-        model=ChatOllama(model="qwen3:1.7b", temperature=0.1), 
+        model=ChatOllama(model="llama3.2", temperature=0.1), 
         db_uri=POSTGRES_URI
     )
     graph.research = ResearchTeams(
-        model=ChatOllama(model="sqlcoder:7b", temperature=0.1), 
         qdrant_url=QDRANT_URL, 
         collection_name=QDRANT_COLLECTION_NAME, 
         embeded_model_nam=EMBEDED_MODEL_NAME
@@ -104,6 +103,6 @@ if prompt := st.chat_input("Type your message"):
             },
         )
 
-        answer = answer = response["messages"][-1].content.split("</think>\n")[-1]
+        answer = response["messages"][-1].content.split("</think>\n")[-1]
         st.write(answer)
         st.session_state.history.append(("assistant", answer))
