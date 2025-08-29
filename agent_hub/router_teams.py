@@ -1,4 +1,6 @@
 import os
+import re
+import json
 from langchain_ollama import ChatOllama
 from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
@@ -51,64 +53,72 @@ class RouterTeams:
         self.relavant_cntx = ""
         self.prompt = (
             "You are a Construction Management (CM) domain expert. "
-            "Your task is to carefully analyze a user's question and map it to the most relevant CM Feature. "
-            "If no feature clearly applies, select 'Unknown'.\n\n"
-
-            "Follow this reasoning process step by step:\n"
-            "1. Analyze the user’s question to identify the core intent (what they really want or need).\n"
-            "2. Check if the intent is related to Construction Management.\n"
-            "3. If related, select the single CM Feature that best fits the intent.\n"
-            "   - If multiple could apply, choose the one most directly responsible for solving the problem.\n"
-            "   - If no feature clearly applies, return 'Unknown'.\n\n"
-
+            "Classify the user’s question into the single most relevant CM Feature, or 'Unknown' if none apply.\n\n"
+            "Reasoning steps:\n"
+            "1. Identify the user’s core intent.\n"
+            "2. Check if it relates to Construction Management.\n"
+            "3. If yes, choose the ONE best-fitting feature from the list. If none, return 'Unknown'.\n\n"
             "Available CM Features:\n{cm_tools}\n\n"
-
-            "Your response must be a PLAIN TEXT with the following fields:\n"
-            "- features: The chosen feature name from the list above (or 'Unknown').\n"
-            "- features_selected_reason: A concise explanation (2–3 sentences) that:\n"
-            "   • Identifies the user’s core intent\n"
-            "   • Explains why this feature addresses that intent based on CM business logic\n"
-            "   • Justifies why other features are less relevant\n"
+            "Respond ONLY in a valid JSON object with this format:\n"
+            "```json\n"
+            "{{\n"
+            "  \"tool\": \"<CM Feature>\",\n"
+            "  \"tool_selected_reason\": \"<Reason>\",\n"
+            "}}\n"
+            "```"
         )
 
     def build(self):
         g = StateGraph(RouterState)
         g.add_node("tool_router_node", self.tool_classification)
-        g.add_node("generate_structured_response", self.generate_structured_response)
 
         g.add_edge(START, "tool_router_node")
-        g.add_edge("tool_router_node", "generate_structured_response")
-        g.add_edge("generate_structured_response", END)
+        g.add_edge("tool_router_node", END)
         return g.compile()
+
+    @staticmethod
+    def extract_tool_and_reason(text: str):
+        # grab JSON inside ```json ... ```
+        m = re.search(r"```json\s*(\{.*?\})\s*```", text, flags=re.S|re.I)
+        json_str = m.group(1) if m else re.search(r"(\{.*\})", text, flags=re.S).group(1)
+        data = json.loads(json_str)
+        return data["tool"], data["tool_selected_reason"]
 
     def tool_classification(self, state: RouterState):
         # Get latest human question
         question = get_latest_question(state)
 
-        # Create prompt
+        # Create prompt with available tools
         prompt_str = self.prompt.format(cm_tools=CM_TOOLS)
 
-        # Let model thinking first
         response = self.model.invoke(question + [SystemMessage(content=prompt_str)])
 
-        return {"messages": response}
-
-    def generate_structured_response(self, state: RouterState):
-        # Create prompt
-        prompt_str = self.prompt.format(cm_tools=CM_TOOLS)
-
-        # Then answer with structed output
-        structed_model = self.model.with_structured_output(RoutingDecision)
-        response = structed_model.invoke(state['messages'] + [SystemMessage(content=prompt_str)])
-
-        # Extract info
-        cm_tool = response.tool
-        tool_selected_reason = response.tool_selected_reason
-        ai_msg = AIMessage(content=f"Tool: {cm_tool}\nReason: {tool_selected_reason}")
+        # Parse two-line format
+        text = response.content.strip()
+        cm_tool, reason = self.extract_tool_and_reason(text)
 
         return {
-            "messages": [ai_msg],
             "tool": cm_tool,
-            "tool_selected_reason": tool_selected_reason,
+            "tool_selected_reason": reason,
         }
+
+
+    # def generate_structured_response(self, state: RouterState):
+    #     # Create prompt
+    #     prompt_str = self.prompt.format(cm_tools=CM_TOOLS)
+
+    #     # Then answer with structed output
+    #     structed_model = self.model.with_structured_output(RoutingDecision)
+    #     response = structed_model.invoke([state['messages'][-1]] + [SystemMessage(content=prompt_str)])
+
+    #     # Extract info
+    #     cm_tool = response.tool
+    #     tool_selected_reason = response.tool_selected_reason
+    #     ai_msg = AIMessage(content=f"Tool: {cm_tool}\nReason: {tool_selected_reason}")
+
+    #     return {
+    #         "messages": [ai_msg],
+    #         "tool": cm_tool,
+    #         "tool_selected_reason": tool_selected_reason,
+    #     }
     
