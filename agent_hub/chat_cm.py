@@ -58,25 +58,7 @@ class ChatCM:
         }
     
     def help_desk_node(self, state: MainState):
-        prompt = (
-            "Your name is ChatCM. "
-            "You are a concise, polite, and professional help desk assistant for a Construction Management (CM) system. "
-            "ALLOWED SCOPE:\n"
-            "- Greetings and small talk\n"
-            "- Basic information about yourself (as ChatCM)\n"
-            "- CM processes, documents, workflows, roles, and best practices\n\n"
-            "IMPORTANT RULES:\n"
-            "- Do NOT answer questions outside the allowed scope.\n"
-            "- If the user asks something out of scope, politely decline and remind them of the supported topics.\n"
-            "- Keep answers concise, clear, and polite.\n"
-        )
-        question = get_latest_question(state)
-        msg = [
-            HumanMessage(content=f"Question: {question[-1].content}"),
-            HumanMessage(content=f"Context: {state["tool_selected_reason"]}"),
-            SystemMessage(content=prompt.strip())
-        ]
-        res = self._help_desk.invoke({"messages": state["messages"] + msg})
+        res = self._help_desk.invoke({"messages": state["messages"]})
         return {"messages": res["messages"]}
     
     def answer_node(self, state: MainState):

@@ -4,29 +4,20 @@ from typing import List
 from langgraph.graph import MessagesState
 
 class Tools(enum.Enum):
-    DOCUMENT = "Document"
-    SUBMITTAL = "Submittal"
-    RFI = "RFI"
-    INSPECTION = "Inspection"
-    KANBAN = "Kanban"
-    DIRECTORY = "Directory"
-    TRANSMITTAL = "Transmittal"
-    WORK_ORDER = "Work Order"
-    SAFETY = "Safety"
-    INSPECTION_TEST_PLAN = "Inspection Test Plan"
-    SPECIFICATION = "Specification"
-    SCHEDULE = "Schedule"
-    FORM = "Form"
-    LOCATION = "Location"
-    TAG = "Tag"
-    WORK_ORDER_GROUP = "Work Order Group"
-    MEETING = "Meeting"
-    UNKNOWN = "Unknown"
+    #TODO: เขียนให่ละเอียดและเยอะขึ้น
+    SUBMITTAL = ("Submittal", "Digital review/approval process for materials, shop drawings, and product data.")
+    RFI = ("RFI", "Formal clarification process with workflow, deadlines, and status tracking.")
+    INSPECTION = ("Inspection", "Field inspections logged digitally with photos, comments, and corrective actions.")
+    WORK_ORDER = ("Work Order", "Task assignment for corrective or maintenance work tied to inspections or safety.")
+    UNKNOWN = ("Unknown", "No relevant tool identified.")
+
+    def __init__(self, tool: str, description: str):
+        self.tool = tool
+        self.description = description
 
 # Define models
 class RoutingDecision(BaseModel):
-    question: str
-    tool: Tools
+    tool: str
     tool_selected_reason: str
 
 class UserContext(BaseModel):
@@ -38,7 +29,7 @@ class SQLGenerator(BaseModel):
     query: str
     
 class RouterState(MessagesState):
-    tool: Tools
+    tool: str
     tool_selected_reason: str
 
 class PermissionsState(RouterState):
