@@ -81,6 +81,13 @@ class SnippetBuilder:
         # Get Foreign key
         relationships, related_tables = self.get_foreign_keys(table_name=table_name)
 
+        # Remove Duplicate
+        unique_related_tables = []
+        for table in related_tables:
+            if table not in unique_related_tables:
+                unique_related_tables.append(table)
+        related_tables = unique_related_tables
+
         # Convert List to str
         field_content_str = ','.join(field_content)
         relationships_str = ",\n".join(relationships) if relationships else None
@@ -119,6 +126,11 @@ class SnippetBuilder:
         
         with open(f"../docs/{file_name}", "w") as f:
             f.write(json.dumps([doc.model_dump() for doc in self.snippet_docs], indent=2))
+
+    def load_snippet_docs(self, file_name):
+        with open(file_name, "r") as f:
+            docs = json.load(f)
+        return docs
 
 if __name__ == "__main__":
     POSTGRES_URI = os.getenv("POSTGRES_URI")
