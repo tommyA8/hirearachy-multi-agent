@@ -13,7 +13,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
 
 from agent_hub import *
-from main import HierarchicalAgent
 from model.state_model import UserContext
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
@@ -50,14 +49,14 @@ project_id = st.sidebar.number_input("project_id", min_value=1, value=1, step=1)
 
 @st.cache_resource(show_spinner=False)
 def build_agent_once():
-    graph = HierarchicalAgent()
+    graph = ChatCM()
 
     # Setting up the nodes
     graph.router = RouterTeams(
-        model=ChatOllama(model="qwen3:4b", temperature=0.1)
+        model=ChatOllama(model="qwen3:0.6b", temperature=0.1)
     )
     graph.help_desk = ConversationTeams(
-        model=ChatOllama(model="deepseek-r1:1.5b", temperature=0)
+        model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
     )
     graph.database = DatabaseTeams(
         model=ChatOllama(model="llama3.2", temperature=0.1), 
