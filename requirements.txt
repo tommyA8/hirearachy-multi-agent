@@ -18,3 +18,4 @@ langgraph
 fastapi
 uvicorn
 unstructured
+streamlit
