@@ -68,6 +68,8 @@ class RouterTeams:
             "```"
         )
 
+        self.structured_model = ChatOllama(model="qwen3:0.6b", temperature=0).with_structured_output(RoutingDecision)
+        
     def build(self):
         g = StateGraph(RouterState)
         g.add_node("tool_router_node", self.tool_classification)
@@ -91,11 +93,15 @@ class RouterTeams:
         # Create prompt with available tools
         prompt_str = self.prompt.format(cm_tools=CM_TOOLS)
 
-        response = self.model.invoke(question + [SystemMessage(content=prompt_str)])
+        # Find best tool and reason
+        res = self.model.invoke(question + [SystemMessage(content=prompt_str)])
+        
+        # Then answer with structed output
+        response = self.structured_model.invoke([res] + [SystemMessage(content=prompt_str)])
 
-        # Parse two-line format
-        text = response.content.strip()
-        cm_tool, reason = self.extract_tool_and_reason(text)
+        # Extract info
+        cm_tool = response.tool
+        reason = response.tool_selected_reason
 
         return {
             "tool": cm_tool,
