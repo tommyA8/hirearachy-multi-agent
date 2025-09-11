@@ -35,8 +35,20 @@ class ResearchTeams:
 
         # Get The Related Tables to {table}
         for table in relevant_cntx[-1]['related_tables']:
-            relationship = self.qdrant.filter_payload(key="table", value=table)
+            relationship = self.qdrant.filter_payload(key="table", value=table) # TODO: Search RFI ไม่ได้แน่นอน เพราะไม่มีอยู่ใน table
             relevant_cntx.append(relationship[0])
+
+        # Always get company and project context
+        company = self.qdrant.filter_payload(key="table", value="company_company")
+        project = self.qdrant.filter_payload(key="table", value="project_project")
+        relevant_cntx = relevant_cntx + company + project
+
+        # Remove Duplicate
+        unique_related_tables = []
+        for table in relevant_cntx:
+            if table not in unique_related_tables:
+                unique_related_tables.append(table)
+        relevant_cntx = unique_related_tables
 
         # related_tables = "\n".join([(tbl['table'], tbl['fields']) for tbl in relevant_cntx])
         # table_cntx = "\n".join([f"{tbl['table']}: {tbl['fields']}" for tbl in relevant_cntx])
