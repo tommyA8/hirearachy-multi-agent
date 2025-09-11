@@ -19,3 +19,4 @@ fastapi
 uvicorn
 unstructured
 streamlit
+langchain-nvidia-ai-endpoints
