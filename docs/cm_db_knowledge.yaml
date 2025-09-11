@@ -1,0 +1,128 @@
+# Example Question: "Does the status of latest RFI is draft?"
+
+# query → retrieve cm_tools → (Table level analysis) วิเคราะห์คำถามให้ได้ table ที่เกี่ยวข้องมาก่อน → (Fields level analysis) วิเคราะห์คำถามอีกทีว่าต้องใช้ Field ไหนมาตอบคำถาม
+# เวลา user ถามถึง RFI  →  ให้ไปดู business context ก่อน เพื่อวิเคราะห์คำถามในระบบ table ก่อน →  จากนั้น ดึงเอา table ที่เกี่ยวกับ RFI มาให้หมด → วิเคราะห์ในระบบ Field → แล้ว prompt แบบ CoT
+# อธิบาย table แยกกับ business context แล้วค่อยหาวิธีีรวมกันอีกทีหนึ่ง
+
+
+# ให้ llm เลือก table k อันดับ ที่เกี่ยวกับคำถามมากที่สุด จาก context cm_tools พร้อมเหตุผล
+# query 
+# → tool_router
+# → (tool_name, reason)
+# → tool_name search from 'cm_tools'
+# → (tool_name, reason, RFI contexts)
+# → LLM selected top_k related table from RFI contexts
+# → (tool_name, reason, top_k RFI contexts, top_k_table_name)
+# → top_k_table_name search from 'database_documents'
+# → (tool_name, reason, top_k RFI contexts, top_k_table_name, top_k_table_schema)
+
+document_document.due_date is document due date
+document_submittal.due_date is initiator due date
+version: "1.0"
+
+database_docs:
+  tables:
+    document_document:
+      description: "document_document is a super table for all document types (RFI, Submittal, Inspection)."
+      fields:
+        - id: "[BIGINT] Primary key"
+        - deleted: "[TIMESTAMP] Indicates if this object has been deleted"
+        - deleted_by_cascade: "[BOOLEAN] Indicates if this object has been deleted by cascade"
+        - created_at: "[TIMESTAMP] date and time when this object was created"
+        - updated_at: "[TIMESTAMP] date and time when this object was updated"
+        - code: "[VARCHAR(50)] the unique code for this document"
+        - title: "[VARCHAR(255)] the title of this document"
+        - type: "[INTEGER] the ENUM type of this document. (0 = RFI, 1 = Submittal, 2 = Inspection)"
+        - process: "[INTEGER] the ENUM of 'Process status' (state/status of each document type) of this document. (0 = Draft, 1 = Review, 2 = Open, 3 = Waiting For Manager, 4 = Closed)"
+        - status: "[INTEGER] the ENUM of 'Task decision 'of each document type. (0 = Invalid, 1 = Pending, 2 = In Process, 3 = Approved, 4 = Approved as Note, 5 = Rejected, 6 = Rejected as Note, 7 = Deleted)"
+        - due_date: "[TIMESTAMP] the due date of document (Including RFI, Submittal and Inspection)"
+        - schedule_impact: "[DOUBLE PRECISION] schedule impact of this document"#TODO: What's meaning of this field
+        - cost_impact: "[DOUBLE PRECISION] cost impact of this document"#TODO: What's meaning of this field
+        - drawing_number: "[VARCHAR(255)] drawing number of this document"#TODO: What's meaning of this field
+        - cycle: "[INTEGER] the cycle of this document"#TODO: What's meaning of this field
+        - is_private: "[BOOLEAN] indicates if this document is private"#TODO: What's meaning of this field
+        - description: "[TEXT] the description of this document"#TODO: What's meaning of this field
+        - created_by_id: "[INTEGER] the id of user who created this document. This is a foreign key to auth_user.id (document_document.created_by_id → auth_user.id)"#TODO: Foriegn key
+        - discipline_id: "[BIGINT] the id of discipline of this document. This is a foreign key to company_discipline.id (document_document.discipline_id → company_discipline.id)"#TODO: Foriegn key
+        - location_id: "[BIGINT] the id of location of this document. This is a foreign key to project_location.id (document_document.location_id → project_location.id)"#TODO: Foriegn key
+        - project_id: "[BIGINT] the id of project of this document. This is a foreign key to project_project.id (document_document.project_id → project_project.id)"#TODO: Foriegn key
+        - specification_id: "[BIGINT] the id of specification of this document. This is a foreign key to project_specification.id (document_document.specification_id → project_specification.id)"#TODO: Foriegn key
+        - template_id: "[BIGINT] the id of template of this document. This is a foreign key to document_template.id (document_document.template_id → document_template.id)"#TODO: Foriegn key
+        - updated_by_id	order: "[BIGINT] the id of user who updated this document. This is a foreign key to auth_user.id (document_document.updated_by_id → auth_user.id)"#TODO: Foriegn key
+        - received_from_id: "[BIGINT] the id of user who received this document. This is a foreign key to auth_user.id (document_document.received_from_id → auth_user.id)"#TODO: Foriegn key
+        - inspection_test_plan_id: "[BIGINT] the id"#TODO: Foriegn key
+        - responsible_contractor_id: "[BIGINT] the id of responsible contractor of this document. This is a foreign key to company_contractor.id (document_document.responsible_contractor_id → company_contractor.id)"#TODO: Foriegn key
+        - is_recently_rejected: "[BOOLEAN] indicates if this document is recently rejected"#TODO: What's meaning of this field
+        - floor_plan_id: "[BIGINT] the id of floor plan of this document. This is a foreign key to project_floorplan.id (document_document.floor_plan_id → project_floorplan.id)"#TODO: Foriegn key
+      relations:
+        - document_document.created_by_id → auth_user.id
+        - document_document.discipline_id → company_discipline.id
+        - document_document.floor_plan_id → project_floorplan.id
+        - document_document.inspection_test_plan_id → inspection_test_plan_inspectiontestplan.id
+        - document_document.location_id → project_location.id
+        - document_document.project_id → project_project.id
+        - document_document.received_from_id → auth_user.id
+        - document_document.responsible_contractor_id → company_contractor.id
+        - document_document.specification_id → project_specification.id
+        - document_document.template_id → document_template.id
+        - document_document.updated_by_id → auth_user.id
+
+    document_submittal:
+      description: >
+        document_submittal is a extension of table::document_document for submittal. It contains additional fields. i.e. document_number, rev, due_date, status, response, response_date, round, cycle, is_latest, created_by_id, document_id, updated_by_id, user_id, rejected_to
+      fields:
+        - id: "[BIGINT] Primary key"
+        - deleted: "[TIMESTAMP] Indicates if this object has been deleted"
+        - deleted_by_cascade: "[BOOLEAN] indicates if this object has been deleted by cascade"
+        - created_at: "[TIMESTAMP] the time this object was created"# TODO: what's different between document_document.created_at and document_submittal.created_at
+        - updated_at: "[TIMESTAMP] the time this object was updated"# TODO: what's different between document_document.updated_at and document_submittal.updated_at
+        - document_number: "[VARCHAR(155)] the document number of this submittal"#TODO: What's meaning of this field
+        - rev: "[VARCHAR(2)] the revision of this submittal"#TODO: What's meaning of this field
+        - due_date: "[TIMESTAMP] the due date of this submittal's initiator"
+        - status: "[INTEGER] the status of this submittal's initiator. (0 = Pending, 1 = Approved, 2 = Approved as Note, 3 = Rejected, 4 = Rejected as Note, 5 = Change BIC)"
+        - response: "[TEXT] the response of this submittal"#TODO: What's meaning of this field
+        - response_date: "[TIMESTAMP] the response date of this submittal"#TODO: What's meaning of this field
+        - round: "[INTEGER] the round of this submittal"#TODO: What's meaning of this field
+        - cycle: "[INTEGER] the cycle of this submittal"#TODO: What's meaning of this field
+        - is_latest: "[BOOLEAN] indicates if this submittal is latest"#TODO: What's meaning of this field
+        - created_by_id: "[INTEGER] the id of user who created this submittal. This is a foreign key to auth_user.id (document_submittal.created_by_id → auth_user.id)"#TODO: Foriegn key
+        - document_id: "[BIGINT] the id of document of this submittal. This is a foreign key to document_document.id (document_submittal.document_id → document_document.id)"#TODO: Foriegn key
+        - updated_by_id: "[INTEGER] the id of user who updated this submittal. This is a foreign key to auth_user.id (document_submittal.updated_by_id → auth_user.id)"#TODO: Foriegn key
+        - user_id: "[INTEGER] the id of initiator of this submittal. This is a foreign key to auth_user.id (document_submittal.user_id → auth_user.id)"#TODO: Foriegn key
+        - rejected_to: "[VARCHAR(20)] the rejected to of this submittal"#TODO: What's meaning of this field
+      relations:
+        - document_submittal.created_by_id → auth_user.id
+        - document_submittal.document_id → document_document.id
+        - document_submittal.updated_by_id → auth_user.id
+        - document_submittal.user_id → auth_user.id
+
+    document_inspection:
+      descriptive: "document_inspection table"
+      fields:
+        - id: "[BIGINT] Primary key"
+        - deleted: "[TIMESTAMP] Indicates if this object has been deleted"
+        - deleted_by_cascade: "[BOOLEAN] indicates if this object has been deleted by cascade"
+        - created_at: "[TIMESTAMP] the time this object was created"
+        - updated_at: "[TIMESTAMP] the time this object was updated"
+        - due_date: "[TIMESTAMP] the due date of this inspection"
+        - status: "[INTEGER] the status of this inspection"
+        - response: "[TEXT] the response of this inspection"
+        - response_date: "[TIMESTAMP] the response date of this inspection"
+        - round: "[INTEGER] the round of this inspection"
+        - cycle: "[INTEGER] the cycle of this inspection"
+        - is_latest: "[BOOLEAN] indicates if this inspection is latest"
+        - created_by_id: "[INTEGER] the id of user who created this inspection. This is a foreign key to auth_user.id (document_inspection.created_by_id → auth_user.id)"
+        - document_id: "[BIGINT] the id of document of this inspection. This is a foreign key to document_document.id (document_inspection.document_id → document_document.id)"
+        - updated_by_id: "[INTEGER] the id of user who updated this inspection. This is a foreign key to auth_user.id (document_inspection.updated_by_id → auth_user.id)"
+        - form_id: "[BIGINT] the id of form of this inspection. This is a foreign key to project_form.id (document_inspection.form_id → project_form.id)"
+        - max_score: "[DOUBLE PRECISION] the max score of this inspection"
+        - score: "[DOUBLE PRECISION] the score of this inspection"
+        - stat: "[JSONB] the stat of this inspection"
+        - response_user_id: "[INTEGER] the id of user who responded this inspection. This is a foreign key to auth_user.id (document_inspection.response_user_id → auth_user.id)"
+      relations:
+        - document_inspection.created_by_id → auth_user.id
+        - document_inspection.document_id → document_document.id
+        - document_inspection.form_id → project_form.id
+        - document_inspection.response_user_id → auth_user.id
+        - document_inspection.updated_by_id → auth_user.id
+
