@@ -4,12 +4,9 @@ load_dotenv(override=True)
 import warnings
 warnings.filterwarnings("ignore")
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ChatMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
-
-from utils.is_valid_tool_permission import is_valid_tool_permission
-from utils.get_latest_question import get_latest_question
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from model.state_model import *
 from agent_hub import ChatCM, RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
 
@@ -31,10 +28,12 @@ def chat_with_agent():
     graph.help_desk = ConversationTeams(
         # The mode should be a thinking model MoE
         model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
+        # model=ChatNVIDIA(model="deepseek-ai/deepseek-r1", temperature=0.1, api_key="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"),
     )
     graph.database = DatabaseTeams(
         # SQL Expert
-        model=ChatOllama(model="llama3.2", temperature=0.1), 
+        # model=ChatOllama(model="llama3.2", temperature=0.1), 
+        model=ChatNVIDIA(model="qwen/qwen2.5-coder-7b-instruct", temperature=0, api_key="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"),
         db_uri=POSTGRES_URI
     )
     graph.research = ResearchTeams(
