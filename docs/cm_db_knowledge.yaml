@@ -81,9 +81,12 @@ version: "1.0"
 database_docs:
   tables:
     document_document:
-      name: "document_document"
+      table_name: "document_document"
       description: >
-        document_document is a master table for all document types (RFI, Submittal, Inspection).
+        document_document is the master table for all document types (RFI, Submittal, Inspection).  
+        By itself, document_document refers to an RFI.  
+        When joined with document_submittal, it represents a Submittal.  
+        When joined with document_inspection, it represents an Inspection.
       fields:
         - id: "[BIGINT] Primary key"
         - deleted: "[TIMESTAMP] Indicates when this object was deleted"
@@ -129,7 +132,7 @@ database_docs:
         - document_document.updated_by_id → auth_user.id
 
     document_submittal:
-      name: "document_submittal"
+      table_name: "document_submittal"
       description: >
         document_submittal is an extension of table::document_document for submittals. 
         It contains additional fields such as document_number, rev, due_date, status, 
@@ -163,7 +166,7 @@ database_docs:
         - document_submittal.user_id → auth_user.id
 
     document_inspection:
-      name: "document_inspection"
+      table_name: "document_inspection"
       description: "document_inspection table"
       fields:
         - id: "[BIGINT] Primary key"
@@ -193,3 +196,69 @@ database_docs:
         - document_inspection.response_user_id → auth_user.id
         - document_inspection.updated_by_id → auth_user.id
 
+    project_project:
+      table_name: "project_project"
+      description: "project_project table"
+      fields:
+        - id: "[BIGINT] Primary key"
+        - deleted: "[TIMESTAMP] Indicates if this object has been deleted"
+        # - deleted_by_cascade: "[BOOLEAN] indicates if this object has been deleted by cascade"
+        - created_at: "[TIMESTAMP] the time this object was created"
+        # - updated_at: "[TIMESTAMP] the time this object was updated"
+        - code: "[VARCHAR(155)] Project code"
+        - title: "[VARCHAR(155)] Project title"
+        - uuid: "[VARCHAR(155)] Project uuid"
+        - image: "[VARCHAR(155)] Project image"
+        - value: "[DOUBLE PRECISION] Project value"
+        - size: "[DOUBLE PRECISION] Project size"
+        - description: "[VARCHAR(155)] Project description"
+        - start_date: "[TIMESTAMP] Project start date"
+        - end_date: "[TIMESTAMP] Project end date"
+        - company_id: "[BIGINT] the id of company of this project. This is a foreign key to company_company.id (project_project.company_id → company_company.id)"
+        - created_by_id: "[INTEGER] the id of user who created this project. This is a foreign key to auth_user.id (project_project.created_by_id → auth_user.id)"
+        - process_id: "[BIGINT] the id of process of this project. This is a foreign key to project_process.id (project_project.process_id → project_process.id)"
+        - project_type_id: "[BIGINT] the id of project type of this project. This is a foreign key to project_project_type.id (project_project.project_type_id → project_project_type.id)"
+        - updated_by_id: "[INTEGER] the id of user who updated this project. This is a foreign key to auth_user.id (project_project.updated_by_id → auth_user.id)"
+        - address: "[VARCHAR(155)] Project address"
+        - city: "[VARCHAR(155)] Project city"
+        - country: "[VARCHAR(155)] Project country"
+        - fax: "[VARCHAR(155)] Project fax"
+        - latitude: "[DOUBLE PRECISION] Project latitude"
+        - longitude: "[DOUBLE PRECISION] Project longitude"
+        - phone: "[VARCHAR(155)] Project phone"
+        - postcode: "[VARCHAR(155)] Project postcode"
+        - state: "[VARCHAR(155)] Project state"
+        - time_zone: "[VARCHAR(155)] Project time zone"
+        - zone: "[VARCHAR(155)] Project zone"
+        - currency_id: "[BIGINT] the id of currency of this project. This is a foreign key to project_currency.id (project_project.currency_id → project_currency.id)"
+      relations:
+        - project_project.company_id → company_company.id
+        - project_project.created_by_id → auth_user.id
+        - project_project.currency_id → project_currency.id
+        # - project_project.process_id → project_process.id
+        # - project_project.project_type_id → project_project_type.id
+        - project_project.updated_by_id → auth_user.id
+
+    company_company:
+      table_name: "company_company"
+      description: "company_company table"
+      fields:
+        - id: "[BIGINT] Primary key"
+        - deleted: "[TIMESTAMP] Indicates if this object has been deleted"
+        # - deleted_by_cascade: "[BOOLEAN] indicates if this object has been deleted by cascade"
+        - created_at: "[TIMESTAMP] the time this object was created"
+        # - updated_at: "[TIMESTAMP] the time this object was updated"
+        - code: "[VARCHAR(155)] Company code"
+        - title: "[VARCHAR(155)] Company title"
+        - address: "[VARCHAR(155)] Company address"
+        - logo: "[VARCHAR(155)] Company logo"
+        - subtitle_color: "[VARCHAR(155)] Company subtitle color"
+        - title_color: "[VARCHAR(155)] Company title color"
+        - uuid: "[VARCHAR(155)] Company uuid"
+        - watermark: "[VARCHAR(155)] Company watermark"
+        - project_amount: "[DOUBLE PRECISION] Project amount"
+        - storage_usage: "[DOUBLE PRECISION] Storage usage"
+        - user_amount: "[DOUBLE PRECISION] User amount"
+        - company_limit_id: "[BIGINT] the id of company limit of this company. This is a foreign key to company_company_limit.id (company_company.company_limit_id → company_company_limit.id)"
+      relations:
+        - company_company.company_limit_id → company_company_limit.id
