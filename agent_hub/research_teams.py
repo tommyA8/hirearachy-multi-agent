@@ -28,34 +28,20 @@ class ResearchTeams:
         human_question = get_latest_question(state)
 
         # Get The Most Relevant Context 
-        relevant_cntx = self.qdrant.get_relavant_context(q=human_question[-1].content, 
-                                                         key='table', 
-                                                         value=state['tool'].lower(), 
-                                                         limit=1)
-
-        # Get The Related Tables to {table}
-        for table in relevant_cntx[-1]['related_tables']:
-            relationship = self.qdrant.filter_payload(key="table", value=table) # TODO: Search RFI ไม่ได้แน่นอน เพราะไม่มีอยู่ใน table
-            relevant_cntx.append(relationship[0])
+        relevant_tables = self.qdrant.get_relevant_tables(q=human_question[-1].content, 
+                                                         limit=2)
 
         # Always get company and project context
-        company = self.qdrant.filter_payload(key="table", value="company_company")
-        project = self.qdrant.filter_payload(key="table", value="project_project")
-        relevant_cntx = relevant_cntx + company + project
+        company = self.qdrant.filter_payload(key="name", value="company_company")
+        project = self.qdrant.filter_payload(key="name", value="project_project")
+        relevant_tables = relevant_tables + company + project
 
-        # Remove Duplicate
-        unique_related_tables = []
-        for table in relevant_cntx:
-            if table not in unique_related_tables:
-                unique_related_tables.append(table)
-        relevant_cntx = unique_related_tables
+        # related_tables = "\n".join([(tbl['table'], tbl['fields']) for tbl in relevant_tables])
+        # table_cntx = "\n".join([f"{tbl['table']}: {tbl['fields']}" for tbl in relevant_tables])
 
-        # related_tables = "\n".join([(tbl['table'], tbl['fields']) for tbl in relevant_cntx])
-        # table_cntx = "\n".join([f"{tbl['table']}: {tbl['fields']}" for tbl in relevant_cntx])
-
-        sys_msg = SystemMessage(content=f"Retrieved Relevant {state['tool']}")
+        sys_msg = SystemMessage(content=f"Retrieved Relevant.")
         
         return {
             "messages": [sys_msg],
-            "relavant_context": relevant_cntx
+            "relevant_tables": relevant_tables
         }
