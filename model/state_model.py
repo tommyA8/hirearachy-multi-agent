@@ -8,7 +8,7 @@ class Tools(enum.Enum):
     SUBMITTAL = ("Submittal", "Digital review/approval process for materials, shop drawings, and product data.")
     RFI = ("RFI", "Formal clarification process with workflow, deadlines, and status tracking.")
     INSPECTION = ("Inspection", "Field inspections logged digitally with photos, comments, and corrective actions.")
-    WORK_ORDER = ("Work Order", "Task assignment for corrective or maintenance work tied to inspections or safety.")
+    # WORK_ORDER = ("Work Order", "Task assignment for corrective or maintenance work tied to inspections or safety.")
     UNKNOWN = ("Unknown", "No relevant tool identified.")
 
     def __init__(self, tool: str, description: str):
@@ -37,7 +37,7 @@ class PermissionsState(RouterState):
     permission: str
 
 class RetrieveState(PermissionsState):
-    relavant_context: str
+    relevant_tables: str
 
 class DBState(RetrieveState):
     generated_sql: str
