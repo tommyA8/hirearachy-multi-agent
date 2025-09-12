@@ -62,49 +62,31 @@ class ChatCM:
         return {"messages": res["messages"]}
     
     def answer_node(self, state: MainState):
-        # system = """
-        # Your name is ChatCM.
-        # You are a helpful, concise, and polite help desk for a Construction Management (CM) system.
-
-        # Scope of questions you may answer:
-        # - Construction Management (processes, documents, workflows, roles, best practices)
-        # - Greetings / small talk
-        # - Basic information about yourself (as ChatCM)
-
-        # Instructions:
-        # - Use prior conversation context and available database table/column names as helpful context.
-        # - Keep answers SHORT and directly actionable. Use bullet points or a small table if it improves clarity.
-        # - Cite table/column names in plain text only (no SQL).
-        # - DO NOT output prompts, SQL queries, or any SQL statements.
-        # - If the question is outside the allowed scope, briefly decline and steer the user back to CM topics.
-
-        # Output requirements:
-        # - Plain text only (tables allowed). No code blocks unless showing a table.
-        # - Avoid speculation. If unsure, say so briefly and ask for the minimal detail needed.
-        # - If you cannot answer, please politely decline and steer the user back to CM topics.
-        # - If SQL results are empty or contain errors, politely inform the user and always say you cannot answer.
-
-        # User question:
-        # {question}
-        # """
         question = get_latest_question(state)
+        max_rows = 10
         prompt = (
-            "Given the following user question, corresponding SQL query, "
-            "and SQL result, answer the user question.\n\n"
-            f"Question: {question[-1].content}\n"
-            f"SQL Query: {state['evaluated_sql']}\n"
-            f"SQL Result: {state['sql_results']}"
-        )
-        # msg = [
-        #     # SystemMessage(content=system.format(question=get_latest_question(state)[-1].content)),
-        #     HumanMessage(content=f"Context: {state["tool_selected_reason"]}"),
-        #     HumanMessage(content=f"SQL Query: {state['evaluated_sql']}"),
-        #     HumanMessage(content=f"SQL Results: {state["sql_results"]}")
-        # ]
+            "You are a precise presenter. Given a user question and SQL results, "
+            "return ONLY a Markdown table snippet of the top rows, with no extra prose.\n\n"
 
-        # res = self._help_desk.invoke({"messages": msg})
-        # return {"messages": res["messages"],}
-        res = self._help_desk.invoke({"messages": [SystemMessage(content=prompt)]})
+            "Formatting rules:\n"
+            f"- Use at most the first {max_rows} rows, in the given order (results are already sorted).\n"
+            "- If there are no rows, return exactly:\n"
+            "> No results.\n"
+            "- If the results are a list of objects (dict-like), use the object keys (from the first row) as table headers.\n"
+            "- If the results are a list of tuples/arrays, and headers are not provided, name columns as col1, col2, col3, ...\n"
+            "- Truncate cell values longer than 80 characters with an ellipsis …\n"
+            "- Render ONLY the Markdown table (or the exact no-results line). Do not add any other text.\n"
+            "- Always change datetime format to ISO 8601 (YYYY-MM-DDTHH:MM:SS).\n\n"
+
+            "User Question:\n"
+            f"{question[-1].content}\n\n"
+
+            "SQL Results (Python repr / JSON-like):\n"
+            f"{state['sql_results']}\n\n"
+
+            "Output:\n"
+        )
+        res = self._help_desk.invoke({"messages": state["messages"] + [SystemMessage(content=prompt)]})
         return {"messages": res["messages"]}
 
     def research_node(self, state: MainState):
@@ -115,13 +97,14 @@ class ChatCM:
         
         return {
             "messages": res["messages"],
-            "relavant_context": res["relavant_context"]
+            "relevant_tables": res["relevant_tables"]
         }
 
     def database_node(self, state: MainState):
         res = self._database.invoke({"messages": state["messages"],
                                      "user": state["user"],
-                                     "relavant_context": state["relavant_context"],
+                                     "relevant_tables": state["relevant_tables"],
+                                     "tool": state['tool'],
                                      "tool_selected_reason": state['tool_selected_reason']
                                      })
 
@@ -167,8 +150,8 @@ class ChatCM:
             {"valid": "research_node", "not_valid": "help_desk_node"},
         )
         g.add_edge("research_node", "database_node")
-        g.add_edge("database_node", "answer_node")
-        g.add_edge("answer_node", END)
+        g.add_edge("database_node", END)
+        # g.add_edge("answer_node", END)
         g.add_edge("help_desk_node", END)
         self.agent = g.compile(checkpointer=checkpointer)
 
