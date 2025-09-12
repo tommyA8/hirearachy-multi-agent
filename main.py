@@ -77,7 +77,25 @@ def test_router():
             step["messages"][-1].pretty_print()
 
 
+def test_research():
+    research = ResearchTeams(
+        qdrant_url=QDRANT_URL, 
+        collection_name=QDRANT_COLLECTION_NAME, 
+        embeded_model_nam=EMBEDED_MODEL_NAME
+    )
+    g = research.build()
+    
+    while True:
+        query = input("Router#> ")
+
+        for step in g.stream({"messages": [HumanMessage(content=query)], "user": UserContext(user_id=1, company_id=1, project_id=1)}, 
+                            stream_mode="values", 
+                            config={"configurable": {"thread_id": "research-node-test-001"},
+                                    "recursion_limit": 100}):
+            step["messages"][-1].pretty_print()
+
 
 if __name__ == "__main__":
     chat_with_agent()
     # test_router()
+    # test_research()
