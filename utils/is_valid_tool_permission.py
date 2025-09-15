@@ -8,7 +8,7 @@ metadata = MetaData()
 def is_valid_tool_permission(user_id: int, 
                              company_id: int, 
                              project_id: int, 
-                             tool_title: str) -> bool:
+                             ) -> bool:
         """
         Check if the user has permission to use a specific tool.
         """
@@ -16,7 +16,6 @@ def is_valid_tool_permission(user_id: int,
             "user_id": user_id,
             "company_id": company_id,
             "project_id": project_id,
-            "tool_title": tool_title,
         }
 
         a   = Table("auth_user", metadata, schema="public", autoload_with=engine)
@@ -29,7 +28,7 @@ def is_valid_tool_permission(user_id: int,
         tl  = Table("company_toollabels", metadata, schema="public", autoload_with=engine)
 
         stmt = (
-            select(tl.c.title).distinct()
+            select(cpg.c.level, tl.c.title)
             .select_from(
                 a
                 .join(cu, a.c.id == cu.c.user_id)
@@ -44,14 +43,20 @@ def is_valid_tool_permission(user_id: int,
                 a.c.id == bindparam("user_id"),
                 c.c.id == bindparam("company_id"),
                 p.c.id == bindparam("project_id"),
-                tl.c.title == bindparam("tool_title"),
+                cpg.c.level >= 1 #0=Not Allowed, 1=View Only, 2=General. 3=Admin 
             )
         )
 
         with engine.connect() as conn:
-            res = conn.execute(stmt, params).scalars().all()
-            if res:
-                return True
+            res = conn.execute(stmt, params).all()
 
-        return False
+        return res
+
+if __name__ == "__main__":
+    import enum
+    res = is_valid_tool_permission(user_id=1, 
+                                       company_id=1,
+                                       project_id=1)
+    
+    print([(level, tool) for level, tool in res if tool in ["RFI", "Submittal", "Inspection"]])
     
