@@ -20,36 +20,10 @@ cm_tools = [tool.tool for tool in Tools]
 tool_descriptions = [tool.description for tool in Tools]
 CM_TOOLS = "\n".join([f"- {tool}: {desc}" for tool, desc in zip(cm_tools, tool_descriptions)])
 
-# @tool
-# def semantic_search_cm_tool(human_question):
-#     # """
-#     # COSTLY. Only call if you truly cannot classify from your own knowledge.
-#     # Returns at most 2 short snippets from the CM User Manual to unblock you.
-#     # """
-#     """
-#     COSTLY. Only call if you truly cannot classify from your own knowledge.
-#     Returns at most 2 short snippets from the CM User Manual to unblock you.
-#     """
-
-#     collection_name = "CM-User-Manual"
-#     embedder_name = "bge-m3:latest"
-#     qdrant = QdrantVector(qdrant_url=os.getenv("QDRANT_URL"), 
-#                           collection_name=collection_name,
-#                           model_name=embedder_name)
-
-#     response = qdrant.client.query_points(
-#         collection_name=collection_name,
-#         query=qdrant.embedder.embed_query(human_question),
-#         search_params=models.SearchParams(hnsw_ef=128, exact=False),
-#         limit=2,
-#     )
-
-#     relavant_cntx = [pt.payload for pt in response.points]
-#     return relavant_cntx
-
 class RouterTeams:
     def __init__(self, model: ChatOllama):
         self.model = model
+        self.structured_model = ChatOllama(model="qwen3:0.6b", temperature=0).with_structured_output(RoutingDecision)
         self.relavant_cntx = ""
         self.prompt = (
             "You are a Construction Management (CM) domain expert. "
@@ -67,13 +41,10 @@ class RouterTeams:
             "}}\n"
             "```"
         )
-
-        self.structured_model = ChatOllama(model="qwen3:0.6b", temperature=0).with_structured_output(RoutingDecision)
         
     def build(self):
         g = StateGraph(RouterState)
         g.add_node("tool_router_node", self.tool_classification)
-
         g.add_edge(START, "tool_router_node")
         g.add_edge("tool_router_node", END)
         return g.compile()
@@ -85,7 +56,8 @@ class RouterTeams:
         json_str = m.group(1) if m else re.search(r"(\{.*\})", text, flags=re.S).group(1)
         data = json.loads(json_str)
         return data["tool"], data["tool_selected_reason"]
-
+    #TODO: ทำให้มันอ่าน chat history แทนที่จะดูจากคำถามล่าสุดอย่างเดียว ไม่งั้น ถ้า user ถามต่อจากคำถามเดิม มันจะเข้าใจว่าไม่เกี่ยวกับ tool ไหนเลย
+    # TODO: ให้มันวิเคราหะ์ว่า คำถามปัจจุบัน ต้องการอะไร และเกี่ยวกับ Tool ไหน โดยวิเคราะห์ history chat
     def tool_classification(self, state: RouterState):
         # Get latest human question
         question = get_latest_question(state)
@@ -107,24 +79,3 @@ class RouterTeams:
             "tool": cm_tool,
             "tool_selected_reason": reason,
         }
-
-
-    # def generate_structured_response(self, state: RouterState):
-    #     # Create prompt
-    #     prompt_str = self.prompt.format(cm_tools=CM_TOOLS)
-
-    #     # Then answer with structed output
-    #     structed_model = self.model.with_structured_output(RoutingDecision)
-    #     response = structed_model.invoke([state['messages'][-1]] + [SystemMessage(content=prompt_str)])
-
-    #     # Extract info
-    #     cm_tool = response.tool
-    #     tool_selected_reason = response.tool_selected_reason
-    #     ai_msg = AIMessage(content=f"Tool: {cm_tool}\nReason: {tool_selected_reason}")
-
-    #     return {
-    #         "messages": [ai_msg],
-    #         "tool": cm_tool,
-    #         "tool_selected_reason": tool_selected_reason,
-    #     }
-    

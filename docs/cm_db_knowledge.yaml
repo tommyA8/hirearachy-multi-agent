@@ -81,7 +81,7 @@ version: "1.0"
 database_docs:
   tables:
     document_document:
-      table_name: "document_document"
+      name: "document_document"
       description: >
         document_document is the master table for all document types (RFI, Submittal, Inspection).  
         By itself, document_document refers to an RFI.  
@@ -130,9 +130,13 @@ database_docs:
         - document_document.specification_id → project_specification.id
         - document_document.template_id → document_template.id
         - document_document.updated_by_id → auth_user.id
+      enums:
+        - type: "0 = RFI, 1 = Submittal, 2 = Inspection"
+        - process: "0 = Draft, 1 = Review, 2 = Open, 3 = Waiting for Manager, 4 = Closed"
+        - status: "0 = Invalid, 1 = Pending, 2 = In Process, 3 = Approved, 4 = Approved as Note, 5 = Rejected, 6 = Rejected as Note, 7 = Deleted"
 
     document_submittal:
-      table_name: "document_submittal"
+      name: "document_submittal"
       description: >
         document_submittal is an extension of table::document_document for submittals. 
         It contains additional fields such as document_number, rev, due_date, status, 
@@ -164,9 +168,11 @@ database_docs:
         - document_submittal.document_id → document_document.id
         - document_submittal.updated_by_id → auth_user.id
         - document_submittal.user_id → auth_user.id
+      enums:
+        - status: "0 = Pending, 1 = Approved, 2 = Approved as Note, 3 = Rejected, 4 = Rejected as Note, 5 = Change BIC"
 
     document_inspection:
-      table_name: "document_inspection"
+      name: "document_inspection"
       description: "document_inspection table"
       fields:
         - id: "[BIGINT] Primary key"
@@ -195,9 +201,11 @@ database_docs:
         - document_inspection.form_id → project_form.id
         - document_inspection.response_user_id → auth_user.id
         - document_inspection.updated_by_id → auth_user.id
+      enums:
+        - status: "0 = Pending, 1 = Approved, 2 = Approved as Note, 3 = Rejected, 4 = Rejected as Note, 5 = Change BIC"
 
     project_project:
-      table_name: "project_project"
+      name: "project_project"
       description: "project_project table"
       fields:
         - id: "[BIGINT] Primary key"
@@ -238,9 +246,10 @@ database_docs:
         # - project_project.process_id → project_process.id
         # - project_project.project_type_id → project_project_type.id
         - project_project.updated_by_id → auth_user.id
+      enums:
 
     company_company:
-      table_name: "company_company"
+      name: "company_company"
       description: "company_company table"
       fields:
         - id: "[BIGINT] Primary key"
@@ -262,3 +271,5 @@ database_docs:
         - company_limit_id: "[BIGINT] the id of company limit of this company. This is a foreign key to company_company_limit.id (company_company.company_limit_id → company_company_limit.id)"
       relations:
         - company_company.company_limit_id → company_company_limit.id
+      enums:
+      

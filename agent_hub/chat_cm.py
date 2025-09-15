@@ -52,51 +52,47 @@ class ChatCM:
         res = self._router.invoke({"messages": state["messages"], 
                                    "user": state["user"]})
         return {
-            "messages": res["messages"],
             "tool": res["tool"], 
             "tool_selected_reason": res["tool_selected_reason"]
         }
     
     def help_desk_node(self, state: MainState):
         res = self._help_desk.invoke({"messages": state["messages"]})
-        return {"messages": res["messages"]}
+        return {
+            "messages": res["messages"]
+        }
     
-    def answer_node(self, state: MainState):
-        question = get_latest_question(state)
-        max_rows = 10
-        prompt = (
-            "You are a precise presenter. Given a user question and SQL results, "
-            "return ONLY a Markdown table snippet of the top rows, with no extra prose.\n\n"
+    # def answer_node(self, state: MainState):
+    #     question = get_latest_question(state)
+    #     max_rows = 10
+    #     prompt = (
+    #         "You are a precise presenter. Given a user question and SQL results, "
+    #         "return ONLY a Markdown table snippet of the top rows, with no extra prose.\n\n"
 
-            "Formatting rules:\n"
-            f"- Use at most the first {max_rows} rows, in the given order (results are already sorted).\n"
-            "- If there are no rows, return exactly:\n"
-            "> No results.\n"
-            "- If the results are a list of objects (dict-like), use the object keys (from the first row) as table headers.\n"
-            "- If the results are a list of tuples/arrays, and headers are not provided, name columns as col1, col2, col3, ...\n"
-            "- Truncate cell values longer than 80 characters with an ellipsis …\n"
-            "- Render ONLY the Markdown table (or the exact no-results line). Do not add any other text.\n"
-            "- Always change datetime format to ISO 8601 (YYYY-MM-DDTHH:MM:SS).\n\n"
+    #         "Formatting rules:\n"
+    #         f"- Use at most the first {max_rows} rows, in the given order (results are already sorted).\n"
+    #         "- If there are no rows, return exactly:\n"
+    #         "> No results.\n"
+    #         "- If the results are a list of objects (dict-like), use the object keys (from the first row) as table headers.\n"
+    #         "- If the results are a list of tuples/arrays, and headers are not provided, name columns as col1, col2, col3, ...\n"
+    #         "- Truncate cell values longer than 80 characters with an ellipsis …\n"
+    #         "- Render ONLY the Markdown table (or the exact no-results line). Do not add any other text.\n"
+    #         "- Always change datetime format to ISO 8601 (YYYY-MM-DDTHH:MM:SS).\n\n"
 
-            "User Question:\n"
-            f"{question[-1].content}\n\n"
+    #         "User Question:\n"
+    #         f"{question[-1].content}\n\n"
 
-            "SQL Results (Python repr / JSON-like):\n"
-            f"{state['sql_results']}\n\n"
+    #         "SQL Results (Python repr / JSON-like):\n"
+    #         f"{state['sql_results']}\n\n"
 
-            "Output:\n"
-        )
-        res = self._help_desk.invoke({"messages": state["messages"] + [SystemMessage(content=prompt)]})
-        return {"messages": res["messages"]}
+    #         "Output:\n"
+    #     )
+    #     res = self._help_desk.invoke({"messages": state["messages"] + [SystemMessage(content=prompt)]})
+    #     return {"messages": res["messages"]}
 
     def research_node(self, state: MainState):
-        res = self._research.invoke({"messages": state["messages"], 
-                                     "tool": state["tool"],
-                                    #  "tool_selected_reason": state["tool_selected_reason"]
-                                     })
-        
+        res = self._research.invoke({"messages": state["messages"]})
         return {
-            "messages": res["messages"],
             "relevant_tables": res["relevant_tables"]
         }
 
@@ -107,11 +103,8 @@ class ChatCM:
                                      "tool": state['tool'],
                                      "tool_selected_reason": state['tool_selected_reason']
                                      })
-
         return {
-            "messages": res["messages"], 
-            "evaluated_sql": res["evaluated_sql"],            
-            "sql_results": res["sql_results"]
+            "messages": res["messages"],
         }
 
     def _is_related_to_cm_node(self, state: MainState):
@@ -124,9 +117,7 @@ class ChatCM:
                                                company_id=state["user"].company_id, 
                                                project_id=state["user"].project_id, 
                                                tool_title=state["tool"])
-        ai_msg = SystemMessage(content=state["tool"] + " Permission: " + ("Valid" if valid else "Not Valid"))
         return {
-            "messages": [ai_msg],
             "permission": "valid" if valid else "not_valid"
         }
     
@@ -137,7 +128,7 @@ class ChatCM:
         g.add_node("help_desk_node", self.help_desk_node)
         g.add_node("research_node", self.research_node)
         g.add_node("database_node", self.database_node)
-        g.add_node("answer_node", self.answer_node)
+        # g.add_node("answer_node", self.answer_node)
         
         g.add_edge(START, "tool_classification_node")
         g.add_conditional_edges(

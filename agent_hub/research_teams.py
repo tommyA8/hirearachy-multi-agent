@@ -11,7 +11,12 @@ from utils.get_latest_question import get_latest_question
 from utils.qdrant_helper import QdrantVector
 
 class ResearchTeams:
-    def __init__(self,qdrant_url: str, collection_name: str, embeded_model_nam: str, model: ChatOllama = None):
+    def __init__(self,
+                 qdrant_url: str, 
+                 collection_name: str, 
+                 embeded_model_nam: str, 
+                 model: ChatOllama = None
+                 ):
         self.model = model
         self.qdrant = QdrantVector(qdrant_url=qdrant_url, 
                                    collection_name=collection_name,
@@ -28,20 +33,11 @@ class ResearchTeams:
         human_question = get_latest_question(state)
 
         # Get The Most Relevant Context 
-        relevant_tables = self.qdrant.get_relevant_tables(q=human_question[-1].content, 
-                                                         limit=2)
+        relevant_tables = self.qdrant.get_relevant_tables(q=human_question[-1].content, limit=2)
 
         # Always get company and project context
         company = self.qdrant.filter_payload(key="name", value="company_company")
         project = self.qdrant.filter_payload(key="name", value="project_project")
         relevant_tables = relevant_tables + company + project
 
-        # related_tables = "\n".join([(tbl['table'], tbl['fields']) for tbl in relevant_tables])
-        # table_cntx = "\n".join([f"{tbl['table']}: {tbl['fields']}" for tbl in relevant_tables])
-
-        sys_msg = SystemMessage(content=f"Retrieved Relevant.")
-        
-        return {
-            "messages": [sys_msg],
-            "relevant_tables": relevant_tables
-        }
+        return {"relevant_tables": relevant_tables}

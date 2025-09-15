@@ -18,17 +18,24 @@ EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
 
 
 def chat_with_agent():
+    import torch
+    torch.cuda.empty_cache()
+    
+    print(f"CUDA is available: {torch.cuda.is_available()}")
+    print(torch.cuda.get_device_name(0))
+
     graph = ChatCM()
 
     # Setting up the nodes
     graph.router = RouterTeams(
         # The mode should be a thinking model MoE
-        model=ChatOllama(model="qwen3:0.6b", temperature=0)
+        # model=ChatOllama(model="qwen3:0.6b", temperature=0)
+        model=ChatNVIDIA(model="qwen/qwen3-next-80b-a3b-thinking", temperature=0.1, api_key="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"),
     )
     graph.help_desk = ConversationTeams(
         # The mode should be a thinking model MoE
-        model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
-        # model=ChatNVIDIA(model="deepseek-ai/deepseek-r1", temperature=0.1, api_key="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"),
+        # model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
+        model=ChatNVIDIA(model="deepseek-ai/deepseek-r1", temperature=0.1, api_key="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"),
     )
     graph.database = DatabaseTeams(
         # SQL Expert
@@ -44,7 +51,7 @@ def chat_with_agent():
 
     # Building the agent
     memory = MemorySaver()
-    agent = graph.build(checkpointer=memory, save_graph=False)
+    agent = graph.build(checkpointer=memory, save_graph=True)
 
     while True:
         question = input("#> ")
