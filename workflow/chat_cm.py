@@ -6,8 +6,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from utils.is_valid_tool_permission import is_valid_tool_permission
 from utils.get_latest_question import get_latest_question
 from model.state_model import *
-# from agent_hub import RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
-from agents.is_cm_related import CMRelated
+from agents.question_classifier import QuestionClassifier
 from agents.general_assistant import GeneralAssistant
 
 from typing import Dict, List, Optional
@@ -53,7 +52,7 @@ class ChatCM:
         return self._general_assistant
     
     @cm_related_agent.setter
-    def cm_related_agent(self, graph: CMRelated):
+    def cm_related_agent(self, graph: QuestionClassifier):
         self._cm_related = graph.build()
 
     @general_assistant_agent.setter

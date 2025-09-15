@@ -9,7 +9,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 # from model.state_model import *
 # from agent_hub import RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
-from agents.is_cm_related import CMRelated
+from agents.question_classifier import QuestionClassifier
 from agents.general_assistant import GeneralAssistant
 from workflow.chat_cm import ChatCM, UserContext
 
@@ -20,7 +20,7 @@ EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
 
 def inference():
     agent = ChatCM()
-    agent.cm_related_agent = CMRelated(model= ChatOllama(model="qwen3:0.6b", temperature=0.1))
+    agent.cm_related_agent = QuestionClassifier(model= ChatOllama(model="qwen3:0.6b", temperature=0.1))
     agent.general_assistant_agent = GeneralAssistant(model= ChatOllama(model="qwen3:0.6b", temperature=0.1))
     agent = agent.build(checkpointer=MemorySaver(), save_graph=False)
 
