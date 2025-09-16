@@ -1,25 +1,29 @@
-
 import os
+from dotenv import load_dotenv
+load_dotenv(override=True)
+import warnings
+warnings.filterwarnings("ignore")
 import uuid
 from langchain_community.callbacks.streamlit import (
     StreamlitCallbackHandler,
 )
 import streamlit as st
-from langchain import hub
-# from langchain.agents import AgentExecutor, create_react_agent, load_tools
-# ----- your agent bits (unchanged) -----
 from langchain_ollama import ChatOllama
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
-from agent_hub import *
-from model.state_model import UserContext
+from agents.question_classifier import QuestionClassifier
+from agents.general_assistant import GeneralAssistant
+from agents.cm_supervisor import CMSupervisor
+from agents.cm_tool_agent import *
+from workflow.chat_cm import ChatCM, UserContext
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
-LLM_MODEL = os.getenv("LLM_MODEL")
 EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
+NVIDIA_LLM_API_KEY = os.getenv("NVIDIA_LLM_API_KEY")
 
 def ensure_defaults():
     if "thread_id" not in st.session_state:
@@ -49,33 +53,30 @@ project_id = st.sidebar.number_input("project_id", min_value=1, value=1, step=1)
 
 @st.cache_resource(show_spinner=False)
 def build_agent_once():
-    graph = ChatCM()
-
-    # Setting up the nodes
-    graph.router = RouterTeams(
-        model=ChatOllama(model="qwen3:0.6b", temperature=0.1)
+    agent = ChatCM()
+    agent.question_classifier = QuestionClassifier(
+        #model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
+        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+       )
+    agent.general_assistant_team = GeneralAssistant(
+        #model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
+        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       )
+    agent.supervisor_team = CMSupervisor(
+        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
     )
-    graph.help_desk = ConversationTeams(
-        model=ChatOllama(model="deepseek-r1:1.5b", temperature=0.1)
-    )
-    graph.database = DatabaseTeams(
-        model=ChatOllama(model="llama3.2", temperature=0.1), 
+    agent.rfi_team = RFIAgent(
+        #model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
+        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        yaml_path="docs/cm_db_knowledge.yaml",
         db_uri=POSTGRES_URI
     )
-    graph.research = ResearchTeams(
-        qdrant_url=QDRANT_URL, 
-        collection_name=QDRANT_COLLECTION_NAME, 
-        embeded_model_nam=EMBEDED_MODEL_NAME
-    )
 
-    # Building the agent
-    memory = MemorySaver()
-    agent = graph.build(checkpointer=memory)
+    agent = agent.build(checkpointer=MemorySaver())
 
     return agent
 
 agent = build_agent_once()
-
 
 # Display-only UI history (optional)
 if "history" not in st.session_state:
@@ -90,17 +91,27 @@ if prompt := st.chat_input("Type your message"):
 
     with st.chat_message("assistant"):
         cb = StreamlitCallbackHandler(st.container())
-        response = agent.invoke(
-            {
-                "messages": [HumanMessage(content=prompt)],
-                "user": UserContext(user_id=user_id, company_id=company_id, project_id=project_id),
-            },
-            config={
-                "callbacks": [cb],
-                # 👇 This must stay the same to reuse memory
-                "configurable": {"thread_id": st.session_state.thread_id},
-            },
-        )
+        if len(st.session_state.history) > 1:
+            response = agent.invoke(
+                {
+                    "messages": [HumanMessage(content=prompt)]
+                },
+                config={
+                    "callbacks": [cb],
+                    "configurable": {"thread_id": st.session_state.thread_id},
+                },
+            )
+        else:
+            response = agent.invoke(
+                {
+                    "messages": [HumanMessage(content=prompt)],
+                    "user": UserContext(user_id=user_id, company_id=company_id, project_id=project_id, tool_permissions=None),
+                },
+                config={
+                    "callbacks": [cb],
+                    "configurable": {"thread_id": st.session_state.thread_id},
+                },
+            )
 
         answer = response["messages"][-1].content.split("</think>\n")[-1]
         st.write(answer)
