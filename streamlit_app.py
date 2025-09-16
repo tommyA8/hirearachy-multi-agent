@@ -4,20 +4,16 @@ load_dotenv(override=True)
 import warnings
 warnings.filterwarnings("ignore")
 import uuid
-from langchain_community.callbacks.streamlit import (
-    StreamlitCallbackHandler,
-)
+from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 import streamlit as st
 from langchain_ollama import ChatOllama
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
-from agents.question_classifier import QuestionClassifier
-from agents.general_assistant import GeneralAssistant
-from agents.cm_supervisor import CMSupervisor
-from agents.cm_tool_agent import *
-from workflow.chat_cm import ChatCM, UserContext
+from agents import *
+from model.user import UserContext
+from workflows.chat_cm import ChatCM
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
 QDRANT_URL = os.getenv("QDRANT_URL")

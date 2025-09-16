@@ -8,7 +8,8 @@ from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from agents import *
-from workflow.chat_cm import ChatCM, UserContext
+from model.user import UserContext
+from workflows.chat_cm import ChatCM
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
 QDRANT_URL = os.getenv("QDRANT_URL")
