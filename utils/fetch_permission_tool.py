@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, Table, MetaData, bindparam, select
 engine = create_engine(os.getenv("POSTGRES_URI"))
 metadata = MetaData()
 
-def is_valid_tool_permission(user_id: int, 
+def fetch_permission_tools(user_id: int, 
                              company_id: int, 
                              project_id: int, 
                              ) -> bool:
@@ -43,7 +43,7 @@ def is_valid_tool_permission(user_id: int,
                 a.c.id == bindparam("user_id"),
                 c.c.id == bindparam("company_id"),
                 p.c.id == bindparam("project_id"),
-                cpg.c.level >= 1 #0=Not Allowed, 1=View Only, 2=General. 3=Admin 
+                # cpg.c.level >= 1 #0=Not Allowed, 1=View Only, 2=General. 3=Admin 
             )
         )
 
@@ -53,10 +53,7 @@ def is_valid_tool_permission(user_id: int,
         return res
 
 if __name__ == "__main__":
-    import enum
-    res = is_valid_tool_permission(user_id=1, 
-                                       company_id=1,
-                                       project_id=1)
+    res = fetch_permission_tools(user_id=1, company_id=1, project_id=1)
     
     print([(level, tool) for level, tool in res if tool in ["RFI", "Submittal", "Inspection"]])
     
