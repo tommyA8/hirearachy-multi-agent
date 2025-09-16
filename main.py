@@ -27,16 +27,17 @@ def inference():
        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        )
     agent.supervisor_team = CMSupervisor(
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        model= ChatOllama(model="qwen3:1.7b", temperature=0.1) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
+        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
     )
     agent.rfi_team = RFIAgent(
        #  model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
        yaml_path="docs/cm_db_knowledge.yaml",
        db_uri=POSTGRES_URI
     )
 
-    agent = agent.build(checkpointer=MemorySaver(), save_graph=True)
+    agent = agent.build(checkpointer=MemorySaver(), save_graph=False)
 
     i = 0
     while True:

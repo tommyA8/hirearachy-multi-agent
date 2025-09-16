@@ -18,15 +18,14 @@ class CMSupervisor:
         self.model = model
         self.structured_model = self.model.with_structured_output(Tools)
         self.prompt = (
-            "You are a Construction Management (CM) domain expert. Your task is to classify the incoming QUESTIONs into the single most relevant CM Tools.\n"
-            "Depending on your answer, question will be routed to the right team, so your task is crucial for our team.\n"
-            "There are 3 possible CM Tools:\n"
+            "You are a Construction Management (CM) domain expert. Your task is to classify the incoming query into the single most relevant CM Tools.\n"
+            "Available Tools (Choose one):\n"
             "- RFI - Formal clarification process with workflow, deadlines, and status tracking.\n"
             "- SUBMITTAL - Digital review/approval process for materials, shop drawings, and product data.\n"
             "- INSPECTION - Field inspections logged digitally with photos, comments, and corrective actions.\n"
             "- UNKNOWN - No relevant tool identified.\n\n"
             "You must use the provided **CHAT HISTORY** to infer intent.\n"
-            "QUESTION:\n{question}\n"
+            "QUERY:\n{query}\n"
             "Return in the output only one word (RFI, SUBMITTAL or INSPECTION).\n"
         )
 
@@ -39,7 +38,7 @@ class CMSupervisor:
         return g.compile(checkpointer) if checkpointer is not None else g.compile()
 
     def cm_tool_router(self, state: RouterState) -> RouterState:
-        prompt = self.prompt.format(question=get_latest_question(state))
+        prompt = self.prompt.format(quecry=get_latest_question(state))
         tool_res = self.structured_model.invoke([SystemMessage(content=prompt)] + state['messages'])
     
         return {"tool": tool_res.tool if tool_res is not None else "UNKNOWN"}
