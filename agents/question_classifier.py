@@ -6,9 +6,9 @@ from langchain_core.messages import  HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from utils.get_latest_question import get_latest_question
 
-class QuestionType(BaseModel):
-    CM: bool = Field(description="True if question is related to Construction Management (CM), False otherwise")
-    GENERAL: bool = Field(description="True if question is related to general conversation, False otherwise")
+# class QuestionType(BaseModel):
+#     CM: bool = Field(description="True if question is related to Construction Management (CM), False otherwise")
+#     GENERAL: bool = Field(description="True if question is related to general conversation, False otherwise")
 
 class QuestionTypeState(TypedDict):
     question: str
@@ -28,13 +28,13 @@ class QuestionClassifier:
 
     def build(self, checkpointer=None):
         g = StateGraph(QuestionTypeState)
-        g.add_node("is_cm_related_node", self.is_cm_related)
+        g.add_node("cm_classifier", self.cm_classifier)
 
-        g.add_edge(START, "is_cm_related_node")
-        g.add_edge("is_cm_related_node", END)
+        g.add_edge(START, "cm_classifier")
+        g.add_edge("cm_classifier", END)
         return g.compile(checkpointer) if checkpointer is not None else g.compile()
 
-    def is_cm_related(self, state: QuestionTypeState) -> Dict[str, str]:
+    def cm_classifier(self, state: QuestionTypeState) -> QuestionTypeState:
         # question = get_latest_question(state)
         question_type = self._classify_question(state['question'][-1].content)
         return {"question_type": question_type}
@@ -44,9 +44,5 @@ class QuestionClassifier:
             SystemMessage(content=self.prompt),
             HumanMessage(content=question)
         ]
-        structured_llm = self.model.with_structured_output(QuestionType)
-        res = structured_llm.invoke(messages)
-        if res.CM:
-            return "CM"
-        else:
-            return "GENERAL"
+        res = self.model.invoke(messages)
+        return res.content
