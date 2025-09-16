@@ -4,15 +4,10 @@ load_dotenv(override=True)
 import warnings
 warnings.filterwarnings("ignore")
 from langchain_ollama import ChatOllama
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
-# from model.state_model import *
-# from agent_hub import RouterTeams, ConversationTeams, DatabaseTeams, ResearchTeams
-from agents.question_classifier import QuestionClassifier
-from agents.general_assistant import GeneralAssistant
-from agents.cm_supervisor import CMSupervisor
-from agents.cm_tool_agent import *
+from agents import *
 from workflow.chat_cm import ChatCM, UserContext
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
