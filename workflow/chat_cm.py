@@ -1,50 +1,14 @@
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ChatMessage, ToolCall
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.checkpoint.memory import MemorySaver
-
-from utils.fetch_permission_tool import fetch_permission_tools
-from utils.get_latest_question import get_latest_question
-from model.state_model import *
-from agents.question_classifier import QuestionClassifier
-from agents.general_assistant import GeneralAssistant
-from agents.cm_supervisor import CMSupervisor
-from agents.cm_tool_agent import RFIAgent# SubmittalAgent, InspectionAgent
-
-from typing import Dict, List, Optional
-import enum
-
-
-class PermissionLevel(enum.IntEnum):
-    Not_Allowed = 0
-    View_Only = 1
-    General = 2
-    Admin = 3
-
-class CMTools(enum.Enum):
-    RFI = (0, "Formal clarification process with workflow, deadlines, and status tracking.")
-    SUBMITTAL = (1, "Digital review/approval process for materials, shop drawings, and product data.")
-    INSPECTION = (2, "Field inspections logged digitally with photos, comments, and corrective actions.")
-
-    def __init__(self, tool: str, description: str):
-        self.tool = tool
-        self.description = description
-
-class UserContext(BaseModel):
-    class Permission(BaseModel):
-        level: PermissionLevel
-        tool: str
-
-    user_id: int
-    company_id: int
-    project_id: int
-    tool_permissions: Optional[List[Permission]]
+from agents import *
+from utils import fetch_permission_tools, get_latest_question
+from model.user import UserContext, PermissionLevel
+from model.cm_tools import CMTools
 
 class MainState(MessagesState):
     user: UserContext
     question_type: str
     tool: str
-    next: str
 
 class ChatCM:
     def __init__(self):
