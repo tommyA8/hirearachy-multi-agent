@@ -3,7 +3,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, Chat
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver
 
-from utils.is_valid_tool_permission import is_valid_tool_permission
+from utils.fetch_permission_tool import fetch_permission_tools
 from utils.get_latest_question import get_latest_question
 from model.state_model import *
 from agents.question_classifier import QuestionClassifier
@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 import enum
 
 
-class PermissionLevel(enum.Enum):
+class PermissionLevel(enum.IntEnum):
     Not_Allowed = 0
     View_Only = 1
     General = 2
@@ -124,17 +124,16 @@ class ChatCM:
     def get_tool_permissions_node(self, state: MainState) -> MainState:
         if not state['user'].tool_permissions:
             # Get valid permission tools from Database (res has capitalize)
-            res = is_valid_tool_permission(user_id=state["user"].user_id,
+            res = fetch_permission_tools(user_id=state["user"].user_id,
                                            project_id=state['user'].project_id,
                                            company_id=state['user'].company_id)
             
             # Filter only RFI, Submittal, Inspection
             tool_names = [tool.name for tool in CMTools]
 
-            state['user'].tool_permissions = [
-                UserContext.Permission(level=PermissionLevel(level), tool=tool.upper())
-                for level, tool in res if tool.upper() in tool_names
-            ]
+            # Get user's permission (level, tool_name) for RFI, Submittal and Inspection
+            state['user'].tool_permissions = [UserContext.Permission(level=PermissionLevel(level), tool=tool.upper())
+                                              for level, tool in res if tool.upper() in tool_names]
 
         return {"user": state['user']}
 
@@ -142,9 +141,12 @@ class ChatCM:
         res = self._supervisor_team.invoke({
             "messages": state["messages"],
         })
+        # Find not valid permission
+        not_valid_tools = [pm.tool for pm in state['user'].tool_permissions if pm.level < 1]
 
-        if res["tool"] not in [pm.tool for pm in state['user'].tool_permissions]:
-            return {
+        # If res["tool"] (model's tool selected) in not_valid_tools. It means User not allowed to use res["tool"]
+        if res["tool"] in not_valid_tools:
+            return {  
                 "messages": AIMessage(content="User has no permission."),
                 "tool": "no_valid_permission"
             }
