@@ -50,7 +50,6 @@ def inference():
         if i == 0:
           for step in agent.stream({"messages": [HumanMessage(content=question)], 
                                     "user": UserContext(user_id=1, company_id=1, project_id=1, tool_permissions=None),
-                                    "tool_permissions": None
                                     }, 
                                   stream_mode="values", 
                                   config={"configurable": {"thread_id": "demo-user-002"}}):
