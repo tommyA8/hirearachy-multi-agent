@@ -161,12 +161,12 @@ class ChatCM:
     
     def submittal_node(self, state: MainState):
         return {
-            "messages": [AIMessage(content="THIS IS SUBMITTAL AGENT!!!")]
+            "messages": [AIMessage(content="🛠️ Submittals are currently in development. Only RFIs are supported for now")]
         }
     
     def inspection_node(self, state: MainState):
         return {
-            "messages": [AIMessage(content="THIS IS INSPECTION AGENT!!!")]
+            "messages": [AIMessage(content="🛠️ Inpsection are currently in development. Only RFIs are supported for now")]
         }
 
     def build(self, checkpointer, save_graph=False):
