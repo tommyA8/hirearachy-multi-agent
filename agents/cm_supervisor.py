@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Literal
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 from langchain_ollama import ChatOllama
@@ -7,12 +7,16 @@ from langgraph.graph import StateGraph, START, END, MessagesState
 from utils.get_latest_question import get_latest_question
 import enum
 
+class Tools(BaseModel):
+    tool: Literal["RFI", "SUBMITTAL", "INSPECTION", "UNKNOWN"]
+
 class RouterState(MessagesState):
     tool: str
 
 class CMSupervisor:
     def __init__(self, model: ChatOllama):
         self.model = model
+        self.structured_model = self.model.with_structured_output(Tools)
         self.prompt = (
             "You are a Construction Management (CM) domain expert. Your task is to classify the incoming QUESTIONs into the single most relevant CM Tools.\n"
             "Depending on your answer, question will be routed to the right team, so your task is crucial for our team.\n"
@@ -20,6 +24,7 @@ class CMSupervisor:
             "- RFI - Formal clarification process with workflow, deadlines, and status tracking.\n"
             "- SUBMITTAL - Digital review/approval process for materials, shop drawings, and product data.\n"
             "- INSPECTION - Field inspections logged digitally with photos, comments, and corrective actions.\n"
+            "- UNKNOWN - No relevant tool identified.\n\n"
             "You must use the provided **CHAT HISTORY** to infer intent.\n"
             "QUESTION:\n{question}\n"
             "Return in the output only one word (RFI, SUBMITTAL or INSPECTION).\n"
@@ -35,7 +40,7 @@ class CMSupervisor:
 
     def cm_tool_router(self, state: RouterState) -> RouterState:
         prompt = self.prompt.format(question=get_latest_question(state))
-        res = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+        tool_res = self.structured_model.invoke([SystemMessage(content=prompt)] + state['messages'])
     
-        return {"tool": res.content}
+        return {"tool": tool_res.tool if tool_res is not None else "UNKNOWN"}
 
