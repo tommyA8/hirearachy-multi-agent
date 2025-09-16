@@ -141,6 +141,13 @@ class ChatCM:
         res = self._supervisor_team.invoke({
             "messages": state["messages"],
         })
+        # Check if tool == UNKNOWN
+        if res["tool"] == "UNKNOWN":
+            return {
+                "messages": AIMessage(content="Your question is not related to RFI, Submittal or Inspection."),
+                "tool": "NO_VALID"
+            }
+
         # Find not valid permission
         not_valid_tools = [pm.tool for pm in state['user'].tool_permissions if pm.level < 1]
 
@@ -148,7 +155,7 @@ class ChatCM:
         if res["tool"] in not_valid_tools:
             return {  
                 "messages": AIMessage(content="User has no permission."),
-                "tool": "no_valid_permission"
+                "tool": "NO_VALID"
             }
 
         return {"tool": res["tool"]}
@@ -195,7 +202,7 @@ class ChatCM:
                 "RFI": "rfi_node",
                 "SUBMITTAL": "submittal_node",
                 "INSPECTION": "inspection_node",
-                "no_valid_permission": END
+                "NO_VALID": END
             }
         )
         g.add_edge("rfi_node", END)
