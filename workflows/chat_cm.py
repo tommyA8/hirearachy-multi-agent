@@ -1,9 +1,137 @@
+import os
+from dotenv import load_dotenv
+load_dotenv(override=True)
+import warnings
+warnings.filterwarnings("ignore")
+
+from langchain_ollama import ChatOllama
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
+
 from agents import *
+from agents.cm_tool_agent import BaseToolAgent
 from utils import fetch_permission_tools, get_latest_question
 from model.user import UserContext, Permission
 from model.cm_tools import CMTools
+
+DB_DOCS = os.getenv("DB_DOCS")
+POSTGRES_URI = os.getenv("POSTGRES_URI")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
+EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
+NVIDIA_LLM_API_KEY = os.getenv("NVIDIA_LLM_API_KEY")
+RFI_SQL_PROMPT = (
+    "You are an expert in {dialect} SQL and a domain specialist in Construction Management (CM).\n"
+    "Your task is to generate a **syntactically correct {dialect} SQL query** that answers the user's QUESTION.\n"
+    "You must use the provided **CHAT HISTORY** and **DATABASE INFORMATION** to infer intent.\n\n"
+
+    "INTENT & RULES\n"
+    "- The table `document_document` (alias `d`) always represents RFIs.\n"
+    "- Always JOIN `project_project` (alias `p`) and `company_company` (alias `c`) as follows:\n"
+    "    JOIN project_project AS p ON p.id = d.project_id\n"
+    "    JOIN company_company AS c ON c.id = p.company_id\n"
+    "- Always include WHERE clauses:\n"
+    "    d.deleted IS NULL\n"
+    "    d.type = 0\n"
+    "- If the question implies recency (latest, newest, most recent), order by d.created_at DESC.\n"
+    "- If the question implies oldest, order by d.created_at ASC.\n"
+    "- Use date('now') to represent the current date when the question involves 'today'.\n"
+    "- Unless a specific number of rows is requested, apply: LIMIT {top_k}.\n"
+    "- Only use columns/tables listed under DATABASE INFORMATION; ensure column-table correctness.\n"
+    "- If no fields are specified, default to: d.code, d.title, d.created_at.\n\n"
+
+    "FEW-SHOT EXAMPLES\n"
+    "Q: What are the latest 10 RFIs?\n"
+    "A: SELECT d.code, d.title, d.created_at FROM document_document AS d\n"
+    "JOIN project_project AS p ON p.id = d.project_id\n"
+    "JOIN company_company AS c ON c.id = p.company_id\n"
+    "WHERE d.deleted IS NULL AND d.type = 0 AND d.project_id = 1 AND p.company_id = 1\n"
+    "ORDER BY d.created_at DESC LIMIT 10;\n\n"
+
+    "Q: How many RFIs are there?\n"
+    "A: SELECT COUNT(*) FROM document_document AS d\n"
+    "JOIN project_project AS p ON p.id = d.project_id\n"
+    "JOIN company_company AS c ON c.id = p.company_id\n"
+    "WHERE d.deleted IS NULL AND d.type = 0 AND d.project_id = 1 AND p.company_id = 1;\n\n"
+
+    "Q: Get the process status of the latest RFI\n"
+    "A: SELECT d.process FROM document_document AS d\n"
+    "JOIN project_project AS p ON p.id = d.project_id\n"
+    "JOIN company_company AS c ON c.id = p.company_id\n"
+    "WHERE d.deleted IS NULL AND d.type = 0 AND d.project_id = 1 AND p.company_id = 1\n"
+    "ORDER BY d.created_at DESC LIMIT 1;\n\n"
+
+    "Q: How many RFIs are in process?\n"
+    "A: SELECT COUNT(*) FROM document_document AS d\n"
+    "JOIN project_project AS p ON p.id = d.project_id\n"
+    "JOIN company_company AS c ON c.id = p.company_id\n"
+    "WHERE d.deleted IS NULL AND d.type = 0 AND d.process = 1 AND d.project_id = 1 AND p.company_id = 1;\n\n"
+
+    "Q: How many RFIs are closed?\n"
+    "A: SELECT COUNT(*) FROM document_document AS d\n"
+    "JOIN project_project AS p ON p.id = d.project_id\n"
+    "JOIN company_company AS c ON c.id = p.company_id\n"
+    "WHERE d.deleted IS NULL AND d.type = 0 AND d.process = 4 AND d.project_id = 1 AND p.company_id = 1;\n\n"
+
+    "DATABASE INFORMATION:\nUse only the following tables and columns:\n{table_info}\n\n"
+    "QUESTION:\n{question}\n\n"
+    "RESPOND FORMAT:\n"
+    "Provide only the SQL query as plain text (no explanation, no markdown):\n"
+)
+SUBMITTAL_SQL_PROMPT = (
+    "You are an expert in {dialect} SQL and a domain specialist in Construction Management (CM).\n"
+    "Your task is to generate a **syntactically correct {dialect} SQL query** that answers the user's QUESTION.\n"
+    "You must use the provided **CHAT HISTORY** and **DATABASE INFORMATION** to infer intent.\n\n"
+
+    "INTENT & RULES\n"
+    "- The table `document_document` (alias `d`) always represents RFIs.\n"
+    "- The table `document_submittal` (alias `s`), when JOINED with `document_document` (alias `d`), represents submittals.\n" #NOTE
+    "- Always JOIN `project_project` (alias `p`) and `company_company` (alias `c`) as follows:\n"
+    "    JOIN project_project AS p ON p.id = d.project_id\n"
+    "    JOIN company_company AS c ON c.id = p.company_id\n"
+    "- Always include WHERE clauses:\n"
+    "    d.deleted IS NULL\n"
+    "    d.type = 1 (Submittal)\n" #NOTE
+    "- If the question implies recency (latest, newest, most recent), order by d.created_at DESC.\n"
+    "- If the question implies oldest, order by d.created_at ASC.\n"
+    "- Use date('now') to represent the current date when the question involves 'today'.\n"
+    "- Unless a specific number of rows is requested, apply: LIMIT {top_k}.\n"
+    "- Only use columns/tables listed under DATABASE INFORMATION; ensure column-table correctness.\n"
+    "- If no fields are specified, default to: d.code, d.title, d.created_at.\n\n"
+
+    "DATABASE INFORMATION:\nUse only the following tables and columns:\n{table_info}\n\n"
+    "QUESTION:\n{question}\n\n"
+    "RESPOND FORMAT:\n"
+    "Provide only the SQL query as plain text (no explanation, no markdown):\n"
+)
+INSPECTION_SQL_PROMPT = (
+    "You are an expert in {dialect} SQL and a domain specialist in Construction Management (CM).\n"
+    "Your task is to generate a **syntactically correct {dialect} SQL query** that answers the user's QUESTION.\n"
+    "You must use the provided **CHAT HISTORY** and **DATABASE INFORMATION** to infer intent.\n\n"
+
+    "INTENT & RULES\n"
+    "- The table `document_document` (alias `d`) always represents RFIs.\n"
+    "- The table `document_inspection` (alias `i`), when JOINED with `document_document` (alias `d`), represents inspections.\n" #NOTE
+    "- Always JOIN `project_project` (alias `p`) and `company_company` (alias `c`) as follows:\n"
+    "    JOIN project_project AS p ON p.id = d.project_id\n"
+    "    JOIN company_company AS c ON c.id = p.company_id\n"
+    "- Always include WHERE clauses:\n"
+    "    d.deleted IS NULL\n"
+    "    d.type = 2 (Inspection)\n" #NOTE
+    "- If the question implies recency (latest, newest, most recent), order by d.created_at DESC.\n"
+    "- If the question implies oldest, order by d.created_at ASC.\n"
+    "- Use date('now') to represent the current date when the question involves 'today'.\n"
+    "- Unless a specific number of rows is requested, apply: LIMIT {top_k}.\n"
+    "- Only use columns/tables listed under DATABASE INFORMATION; ensure column-table correctness.\n"
+    "- If no fields are specified, default to: d.code, d.title, d.created_at.\n\n"
+
+    "DATABASE INFORMATION:\nUse only the following tables and columns:\n{table_info}\n\n"
+    "QUESTION:\n{question}\n\n"
+    "RESPOND FORMAT:\n"
+    "Provide only the SQL query as plain text (no explanation, no markdown):\n"
+)
 
 class MainState(MessagesState):
     user: UserContext
@@ -17,7 +145,7 @@ class ChatCM:
         self._supervisor_team = None
         self._rfi_team = None
         self._submittal_team = None
-        self._inspection_yeam = None
+        self._inspection_team = None
 
     @property
     def question_classifier(self):
@@ -56,16 +184,15 @@ class ChatCM:
         self._supervisor_team = graph.build()
 
     @rfi_team.setter
-    def rfi_team(self, graph: RFIAgent):
+    def rfi_team(self, graph: BaseToolAgent):
         self._rfi_team = graph.build()
 
     @submittal_team.setter
-    def submittal_team(self, graph):
+    def submittal_team(self, graph: BaseToolAgent):
         self._submittal_team = graph.build()
 
-
     @inspection_team.setter
-    def inspection_team(self, graph):
+    def inspection_team(self, graph: BaseToolAgent):
         self._inspection_team = graph.build()
 
     def classifier_node(self, state: MainState) -> MainState:
@@ -132,16 +259,22 @@ class ChatCM:
             "messages": res['messages'][-1]
         }
     
-    def submittal_node(self, state: MainState):
+    def submittal_node(self, state: MainState) -> MainState:
+        res = self._submittal_team.invoke({
+            "messages": state['messages']
+        })
         return {
-            "messages": [AIMessage(content="🛠️ Submittals are currently in development. Only RFIs are supported for now")]
+            "messages": res['messages'][-1]
         }
     
-    def inspection_node(self, state: MainState):
+    def inspection_node(self, state: MainState) -> MainState:
+        res = self._inspection_team.invoke({
+            "messages": state['messages']
+        })
         return {
-            "messages": [AIMessage(content="🛠️ Inpsection are currently in development. Only RFIs are supported for now")]
+            "messages": res['messages'][-1]
         }
-
+    
     def build(self, checkpointer, save_graph=False):
         g = StateGraph(MainState)
         g.add_node("classifier_node", self.classifier_node)
@@ -188,4 +321,38 @@ class ChatCM:
             print("Saved graph diagram to graph.png")
         except Exception as e:
             print(f"Could not render graph diagram: {e}")
+
+
+def chatcm_agent():
+    graph = ChatCM()
+    
+    graph.question_classifier = QuestionClassifier(model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY))
+    graph.general_assistant_team = GeneralAssistant(model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY))
+    graph.supervisor_team = CMSupervisor(model= ChatOllama(model="qwen3:1.7b", temperature=0)) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
+    graph.rfi_team = ToolAgentFactory.create(
+       'rfi',
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       db_docs_path=DB_DOCS,
+       db_uri=POSTGRES_URI,
+       sql_prompt=RFI_SQL_PROMPT,
+       default_tables = ['document_document', "company_company", "project_project"]
+    )
+    graph.submittal_team = ToolAgentFactory.create(
+       'submittal',
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       db_docs_path=DB_DOCS,
+       db_uri=POSTGRES_URI,
+       sql_prompt=SUBMITTAL_SQL_PROMPT,
+       default_tables = ['document_document', "company_company", "project_project", "document_submittal"]
+    )
+    graph.inspection_team = ToolAgentFactory.create(
+       'inspection',
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       db_docs_path=DB_DOCS,
+       db_uri=POSTGRES_URI,
+       sql_prompt=INSPECTION_SQL_PROMPT,
+       default_tables = ['document_document', "company_company", "project_project", "document_inspection"]
+    )
+
+    return graph.build(checkpointer=MemorySaver(), save_graph=False)
 
