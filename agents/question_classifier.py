@@ -7,22 +7,23 @@ from langgraph.graph import StateGraph, START, END, MessagesState
 from utils.get_latest_question import get_latest_question
 
 class QuestionType(BaseModel):
-    type: Literal["CM", "GENERAL"]
+    type: Literal['CM', 'GENERAL']
 
-class QuestionTypeState(TypedDict):
-    question: str
+class QuestionTypeState(MessagesState):
     question_type: str
 
 class QuestionClassifier:
     def __init__(self, model: ChatOllama):
         self.model = model
         self.prompt = (
-            "You are a Construction Management (CM) domain expert. Your task is to classify the incoming questions.\n"
-            "Depending on your answer, question will be routed to the right team, so your task is crucial for our team.\n"
-            "There are 2 possible question types:\n"
-            "- CM - questions related to construction management.\n"
-            "- GENERAL - general questions.\n"
-            "Return in the output only one word (CM or GENERAL).\n"
+            "You are a domain expert in Construction Management (CM). "
+            "Your task is to classify the user's latest query based on its intent.\n\n"
+            "Classification Types (choose exactly one):\n"
+            "- CM: query directly related to construction management topics.\n"
+            "- GENERAL: All other questions not related to construction management.\n\n"
+            "Use the provided **CHAT HISTORY** and the latest user message to determine the correct type. "
+            "QUERY:\n{query}\n"
+            "Respond with **only one word**: either 'CM' or 'GENERAL' — no extra text, punctuation, or explanation."
         )
 
     def build(self, checkpointer=None):
@@ -34,14 +35,10 @@ class QuestionClassifier:
         return g.compile(checkpointer) if checkpointer is not None else g.compile()
 
     def cm_classifier(self, state: QuestionTypeState) -> QuestionTypeState:
-        # question = get_latest_question(state)
-        question_type = self._classify_question(state['question'][-1].content)
+        prompt = self.prompt.format(query=get_latest_question(state))
+        # res = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+        res = self.model.with_structured_output(QuestionType).invoke([SystemMessage(content=prompt)] + state['messages'])
+
+        question_type = res.type if "CM" in res.type.upper() else "GENERAL"
         return {"question_type": question_type}
     
-    def _classify_question(self, question: str) -> str:
-        messages = [
-            SystemMessage(content=self.prompt),
-            HumanMessage(content=question)
-        ]
-        res = self.model.with_structured_output(QuestionType).invoke(messages)
-        return res.type
