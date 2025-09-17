@@ -197,9 +197,8 @@ class ChatCM:
         self._inspection_team = graph.build()
 
     def classifier_node(self, state: MainState) -> MainState:
-        question = get_latest_question(state)
         res = self._question_classifier.invoke({
-            "question": [HumanMessage(content=question)]
+            "messages": state["messages"]
         })
         return {
             "question_type": res["question_type"]
@@ -327,12 +326,23 @@ class ChatCM:
 def chatcm_agent():
     graph = ChatCM()
     
-    graph.question_classifier = QuestionClassifier(model=ChatOllama(model="qwen2.5:7b", temperature=0, base_url=CLOUD_OLLAMA_URL))
-    graph.general_assistant_team = GeneralAssistant(model=ChatOllama(model="qwen2.5:7b", temperature=0, base_url=CLOUD_OLLAMA_URL))
-    graph.supervisor_team = CMSupervisor(model=ChatOllama(model="qwen3:1.7b", temperature=0, base_url=CLOUD_OLLAMA_URL)) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
+    graph.question_classifier = QuestionClassifier(
+        model=ChatOllama(model="qwen3:8b", temperature=0.2, base_url=CLOUD_OLLAMA_URL)
+        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        )
+    
+    graph.general_assistant_team = GeneralAssistant(
+        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatOllama(model="qwen3:4b", temperature=0.2, base_url=CLOUD_OLLAMA_URL)
+        )
+    
+    graph.supervisor_team = CMSupervisor(
+        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=CLOUD_OLLAMA_URL)
+        ) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
+    
     graph.rfi_team = ToolAgentFactory.create(
        'rfi',
-       model=ChatOllama(model="qwen2.5:7b", temperature=0, base_url=CLOUD_OLLAMA_URL),
+       model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=CLOUD_OLLAMA_URL),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=RFI_SQL_PROMPT,
@@ -340,7 +350,7 @@ def chatcm_agent():
     )
     graph.submittal_team = ToolAgentFactory.create(
        'submittal',
-       model=ChatOllama(model="qwen2.5:7b", temperature=0, base_url=CLOUD_OLLAMA_URL),
+       model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=CLOUD_OLLAMA_URL),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=SUBMITTAL_SQL_PROMPT,
@@ -348,7 +358,7 @@ def chatcm_agent():
     )
     graph.inspection_team = ToolAgentFactory.create(
        'inspection',
-       model=ChatOllama(model="qwen2.5:7b", temperature=0, base_url=CLOUD_OLLAMA_URL),
+       model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=CLOUD_OLLAMA_URL),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=INSPECTION_SQL_PROMPT,
