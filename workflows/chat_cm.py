@@ -2,7 +2,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from agents import *
 from utils import fetch_permission_tools, get_latest_question
-from model.user import UserContext, PermissionLevel
+from model.user import UserContext, Permission
 from model.cm_tools import CMTools
 
 class MainState(MessagesState):
@@ -96,7 +96,7 @@ class ChatCM:
             tool_names = [tool.name for tool in CMTools]
 
             # Get user's permission (level, tool_name) for RFI, Submittal and Inspection
-            state['user'].tool_permissions = [UserContext.Permission(level=PermissionLevel(level), tool=tool.upper())
+            state['user'].tool_permissions = [Permission(level=level, tool=tool.upper())
                                               for level, tool in res if tool.upper() in tool_names]
 
         return {"user": state['user']}

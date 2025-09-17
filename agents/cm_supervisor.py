@@ -38,7 +38,7 @@ class CMSupervisor:
         return g.compile(checkpointer) if checkpointer is not None else g.compile()
 
     def cm_tool_router(self, state: RouterState) -> RouterState:
-        prompt = self.prompt.format(quecry=get_latest_question(state))
+        prompt = self.prompt.format(query=get_latest_question(state))
         tool_res = self.structured_model.invoke([SystemMessage(content=prompt)] + state['messages'])
     
         return {"tool": tool_res.tool if tool_res is not None else "UNKNOWN"}
