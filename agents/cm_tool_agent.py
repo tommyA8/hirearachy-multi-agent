@@ -1,21 +1,16 @@
-import enum
-import re
 import yaml
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from abc import ABC
+from typing import Dict, List, Optional
+from sqlalchemy import create_engine
 
 from langchain_ollama import ChatOllama
 from langchain_core.tools import BaseTool
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.types import Command
-from sqlalchemy import create_engine
+from langgraph.graph.state import CompiledStateGraph
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits.sql.base import SQLDatabaseToolkit
-from langgraph.prebuilt import create_react_agent
-from langgraph.graph.state import CompiledStateGraph
 
-# Utils
 from utils.get_latest_question import get_latest_question
 
 class SQLState(MessagesState):
@@ -27,6 +22,7 @@ class BaseToolAgent(ABC):
                  model: ChatOllama,
                  db_uri: str,
                  db_docs_path: str,
+                 sql_prompt: str = None,
                  dialect: str = "postgresql",
                  default_top_k: int = 5,
                  default_limit: int = 10,
@@ -42,7 +38,7 @@ class BaseToolAgent(ABC):
         self.default_tables = default_tables or ['document_document', "company_company", "project_project"]
         self.default_table_info = self.get_db_info(self.db_docs_path, self.default_tables)
         
-        self._sql_prompt: str = None
+        self._sql_prompt: str = sql_prompt
         self._answer_prompt = (
             "You are an expert SQL result interpreter.\n"
             "You will be given:\n"
