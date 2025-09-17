@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Literal
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
 from langchain_ollama import ChatOllama
@@ -6,9 +6,8 @@ from langchain_core.messages import  HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from utils.get_latest_question import get_latest_question
 
-# class QuestionType(BaseModel):
-#     CM: bool = Field(description="True if question is related to Construction Management (CM), False otherwise")
-#     GENERAL: bool = Field(description="True if question is related to general conversation, False otherwise")
+class QuestionType(BaseModel):
+    type: Literal["CM", "GENERAL"]
 
 class QuestionTypeState(TypedDict):
     question: str
@@ -44,5 +43,5 @@ class QuestionClassifier:
             SystemMessage(content=self.prompt),
             HumanMessage(content=question)
         ]
-        res = self.model.invoke(messages)
-        return res.content
+        res = self.model.with_structured_output(QuestionType).invoke(messages)
+        return res.type
