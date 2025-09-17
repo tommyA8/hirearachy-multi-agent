@@ -6,14 +6,10 @@ warnings.filterwarnings("ignore")
 import uuid
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
 import streamlit as st
-from langchain_ollama import ChatOllama
-from langchain_nvidia_ai_endpoints import ChatNVIDIA
-from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
-
+from workflows.chat_cm import chatcm_agent
 from agents import *
 from model.user import UserContext
-from workflows.chat_cm import ChatCM
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
 QDRANT_URL = os.getenv("QDRANT_URL")
@@ -49,28 +45,7 @@ project_id = st.sidebar.number_input("project_id", min_value=1, value=1, step=1)
 
 @st.cache_resource(show_spinner=False)
 def build_agent_once():
-    agent = ChatCM()
-    agent.question_classifier = QuestionClassifier(
-        #model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
-       )
-    agent.general_assistant_team = GeneralAssistant(
-        #model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-       )
-    agent.supervisor_team = CMSupervisor(
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
-    )
-    agent.rfi_team = RFIAgent(
-        #model= ChatOllama(model="qwen3:0.6b", temperature=0.1)
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-        yaml_path="docs/cm_db_knowledge.yaml",
-        db_uri=POSTGRES_URI
-    )
-
-    agent = agent.build(checkpointer=MemorySaver())
-
-    return agent
+    return chatcm_agent()
 
 agent = build_agent_once()
 
