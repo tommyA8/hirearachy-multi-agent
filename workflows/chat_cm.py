@@ -1,6 +1,3 @@
-import os
-from dotenv import load_dotenv
-load_dotenv(override=True)
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -15,124 +12,8 @@ from agents.cm_tool_agent import BaseToolAgent
 from utils import fetch_permission_tools, get_latest_question
 from model.user import UserContext, Permission
 from model.cm_tools import CMTools
-
-DB_DOCS = os.getenv("DB_DOCS")
-POSTGRES_URI = os.getenv("POSTGRES_URI")
-QDRANT_URL = os.getenv("QDRANT_URL")
-QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
-EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
-NVIDIA_LLM_API_KEY = os.getenv("NVIDIA_LLM_API_KEY")
-CLOUD_OLLAMA_URL = os.getenv("CLOUD_OLLAMA_URL")
-RFI_SQL_PROMPT = (
-    "You are an expert in {dialect} SQL and a domain specialist in Construction Management (CM).\n"
-    "Your task is to generate a **syntactically correct {dialect} SQL query** that answers the user's QUESTION.\n"
-    "You must use the provided **CHAT HISTORY** and **DATABASE INFORMATION** to infer intent.\n\n"
-
-    "INTENT & RULES\n"
-    "- The table `document_document` (alias `d`) always represents RFIs.\n"
-    "- Always JOIN `project_project` (alias `p`) and `company_company` (alias `c`) as follows:\n"
-    "    JOIN project_project AS p ON p.id = d.project_id\n"
-    "    JOIN company_company AS c ON c.id = p.company_id\n"
-    "- Always include WHERE clauses:\n"
-    "    d.deleted IS NULL\n"
-    "    d.type = 0\n"
-    "- If the question implies recency (latest, newest, most recent), order by d.created_at DESC.\n"
-    "- If the question implies oldest, order by d.created_at ASC.\n"
-    "- Use date('now') to represent the current date when the question involves 'today'.\n"
-    "- Unless a specific number of rows is requested, apply: LIMIT {top_k}.\n"
-    "- Only use columns/tables listed under DATABASE INFORMATION; ensure column-table correctness.\n"
-    "- If no fields are specified, default to: d.code, d.title, d.created_at.\n\n"
-
-    "FEW-SHOT EXAMPLES\n"
-    "Q: What are the latest 10 RFIs?\n"
-    "A: SELECT d.code, d.title, d.created_at FROM document_document AS d\n"
-    "JOIN project_project AS p ON p.id = d.project_id\n"
-    "JOIN company_company AS c ON c.id = p.company_id\n"
-    "WHERE d.deleted IS NULL AND d.type = 0 AND d.project_id = 1 AND p.company_id = 1\n"
-    "ORDER BY d.created_at DESC LIMIT 10;\n\n"
-
-    "Q: How many RFIs are there?\n"
-    "A: SELECT COUNT(*) FROM document_document AS d\n"
-    "JOIN project_project AS p ON p.id = d.project_id\n"
-    "JOIN company_company AS c ON c.id = p.company_id\n"
-    "WHERE d.deleted IS NULL AND d.type = 0 AND d.project_id = 1 AND p.company_id = 1;\n\n"
-
-    "Q: Get the process status of the latest RFI\n"
-    "A: SELECT d.process FROM document_document AS d\n"
-    "JOIN project_project AS p ON p.id = d.project_id\n"
-    "JOIN company_company AS c ON c.id = p.company_id\n"
-    "WHERE d.deleted IS NULL AND d.type = 0 AND d.project_id = 1 AND p.company_id = 1\n"
-    "ORDER BY d.created_at DESC LIMIT 1;\n\n"
-
-    "Q: How many RFIs are in process?\n"
-    "A: SELECT COUNT(*) FROM document_document AS d\n"
-    "JOIN project_project AS p ON p.id = d.project_id\n"
-    "JOIN company_company AS c ON c.id = p.company_id\n"
-    "WHERE d.deleted IS NULL AND d.type = 0 AND d.process = 1 AND d.project_id = 1 AND p.company_id = 1;\n\n"
-
-    "Q: How many RFIs are closed?\n"
-    "A: SELECT COUNT(*) FROM document_document AS d\n"
-    "JOIN project_project AS p ON p.id = d.project_id\n"
-    "JOIN company_company AS c ON c.id = p.company_id\n"
-    "WHERE d.deleted IS NULL AND d.type = 0 AND d.process = 4 AND d.project_id = 1 AND p.company_id = 1;\n\n"
-
-    "DATABASE INFORMATION:\nUse only the following tables and columns:\n{table_info}\n\n"
-    "QUESTION:\n{question}\n\n"
-    "RESPOND FORMAT:\n"
-    "Provide only the SQL query as plain text (no explanation, no markdown):\n"
-)
-SUBMITTAL_SQL_PROMPT = (
-    "You are an expert in {dialect} SQL and a domain specialist in Construction Management (CM).\n"
-    "Your task is to generate a **syntactically correct {dialect} SQL query** that answers the user's QUESTION.\n"
-    "You must use the provided **CHAT HISTORY** and **DATABASE INFORMATION** to infer intent.\n\n"
-
-    "INTENT & RULES\n"
-    "- The table `document_document` (alias `d`) always represents RFIs.\n"
-    "- The table `document_submittal` (alias `s`), when JOINED with `document_document` (alias `d`), represents submittals.\n" #NOTE
-    "- Always JOIN `project_project` (alias `p`) and `company_company` (alias `c`) as follows:\n"
-    "    JOIN project_project AS p ON p.id = d.project_id\n"
-    "    JOIN company_company AS c ON c.id = p.company_id\n"
-    "- Always include WHERE clauses:\n"
-    "    d.deleted IS NULL\n"
-    "    d.type = 1 (Submittal)\n" #NOTE
-    "- If the question implies recency (latest, newest, most recent), order by d.created_at DESC.\n"
-    "- If the question implies oldest, order by d.created_at ASC.\n"
-    "- Use date('now') to represent the current date when the question involves 'today'.\n"
-    "- Unless a specific number of rows is requested, apply: LIMIT {top_k}.\n"
-    "- Only use columns/tables listed under DATABASE INFORMATION; ensure column-table correctness.\n"
-    "- If no fields are specified, default to: d.code, d.title, d.created_at.\n\n"
-
-    "DATABASE INFORMATION:\nUse only the following tables and columns:\n{table_info}\n\n"
-    "QUESTION:\n{question}\n\n"
-    "RESPOND FORMAT:\n"
-    "Provide only the SQL query as plain text (no explanation, no markdown):\n"
-)
-INSPECTION_SQL_PROMPT = (
-    "You are an expert in {dialect} SQL and a domain specialist in Construction Management (CM).\n"
-    "Your task is to generate a **syntactically correct {dialect} SQL query** that answers the user's QUESTION.\n"
-    "You must use the provided **CHAT HISTORY** and **DATABASE INFORMATION** to infer intent.\n\n"
-
-    "INTENT & RULES\n"
-    "- The table `document_document` (alias `d`) always represents RFIs.\n"
-    "- The table `document_inspection` (alias `i`), when JOINED with `document_document` (alias `d`), represents inspections.\n" #NOTE
-    "- Always JOIN `project_project` (alias `p`) and `company_company` (alias `c`) as follows:\n"
-    "    JOIN project_project AS p ON p.id = d.project_id\n"
-    "    JOIN company_company AS c ON c.id = p.company_id\n"
-    "- Always include WHERE clauses:\n"
-    "    d.deleted IS NULL\n"
-    "    d.type = 2 (Inspection)\n" #NOTE
-    "- If the question implies recency (latest, newest, most recent), order by d.created_at DESC.\n"
-    "- If the question implies oldest, order by d.created_at ASC.\n"
-    "- Use date('now') to represent the current date when the question involves 'today'.\n"
-    "- Unless a specific number of rows is requested, apply: LIMIT {top_k}.\n"
-    "- Only use columns/tables listed under DATABASE INFORMATION; ensure column-table correctness.\n"
-    "- If no fields are specified, default to: d.code, d.title, d.created_at.\n\n"
-
-    "DATABASE INFORMATION:\nUse only the following tables and columns:\n{table_info}\n\n"
-    "QUESTION:\n{question}\n\n"
-    "RESPOND FORMAT:\n"
-    "Provide only the SQL query as plain text (no explanation, no markdown):\n"
-)
+from constants.constants import *
+from prompt_templates.prompts import RFI_SQL_PROMPT, SUBMITTAL_SQL_PROMPT, INSPECTION_SQL_PROMPT
 
 class MainState(MessagesState):
     user: UserContext
@@ -235,7 +116,7 @@ class ChatCM:
         # Check if tool == UNKNOWN
         if res["tool"] == "UNKNOWN":
             return {
-                "messages": AIMessage(content="Your question is not related to RFI, Submittal or Inspection."),
+                "messages": AIMessage(content=f"Your question is not related to RFI, Submittal or Inspection. {res['tool']}"),
                 "tool": "NO_VALID"
             }
 
@@ -327,22 +208,23 @@ def chatcm_agent():
     graph = ChatCM()
     
     graph.question_classifier = QuestionClassifier(
-        model=ChatOllama(model="qwen3:8b", temperature=0.2, base_url=CLOUD_OLLAMA_URL)
+        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
         # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         )
     
     graph.general_assistant_team = GeneralAssistant(
-        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-        model=ChatOllama(model="qwen3:4b", temperature=0.2, base_url=CLOUD_OLLAMA_URL)
+        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        # model=ChatOllama(model="qwen3:4b", temperature=0.2, base_url=OLLAMA_URL)
         )
     
     graph.supervisor_team = CMSupervisor(
-        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=CLOUD_OLLAMA_URL)
+        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
         ) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
     
     graph.rfi_team = ToolAgentFactory.create(
        'rfi',
-       model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=CLOUD_OLLAMA_URL),
+    #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=RFI_SQL_PROMPT,
@@ -350,7 +232,8 @@ def chatcm_agent():
     )
     graph.submittal_team = ToolAgentFactory.create(
        'submittal',
-       model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=CLOUD_OLLAMA_URL),
+    #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=SUBMITTAL_SQL_PROMPT,
@@ -358,7 +241,8 @@ def chatcm_agent():
     )
     graph.inspection_team = ToolAgentFactory.create(
        'inspection',
-       model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=CLOUD_OLLAMA_URL),
+    #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
+       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=INSPECTION_SQL_PROMPT,
