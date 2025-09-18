@@ -1,8 +1,8 @@
 
-import os
 from sqlalchemy import create_engine, Table, MetaData, bindparam, select
+from constants.constants import POSTGRES_URI
 
-engine = create_engine(os.getenv("POSTGRES_URI"))
+engine = create_engine(POSTGRES_URI)
 metadata = MetaData()
 
 def fetch_permission_tools(user_id: int, 
