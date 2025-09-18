@@ -8,6 +8,7 @@ from utils.get_latest_question import get_latest_question
 
 class QuestionType(BaseModel):
     type: Literal['CM', 'GENERAL']
+    reason: str
 
 class QuestionTypeState(MessagesState):
     question_type: str
@@ -36,9 +37,8 @@ class QuestionClassifier:
 
     def cm_classifier(self, state: QuestionTypeState) -> QuestionTypeState:
         prompt = self.prompt.format(query=get_latest_question(state))
-        # res = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
         res = self.model.with_structured_output(QuestionType).invoke([SystemMessage(content=prompt)] + state['messages'])
 
-        question_type = res.type if "CM" in res.type.upper() else "GENERAL"
+        question_type = "CM" if "CM" in res.reason.upper() else "GENERAL"
         return {"question_type": question_type}
     
