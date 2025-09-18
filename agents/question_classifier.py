@@ -37,8 +37,10 @@ class QuestionClassifier:
 
     def cm_classifier(self, state: QuestionTypeState) -> QuestionTypeState:
         prompt = self.prompt.format(query=get_latest_question(state))
-        res = self.model.with_structured_output(QuestionType).invoke([SystemMessage(content=prompt)] + state['messages'])
+        resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
 
-        question_type = "CM" if "CM" in res.reason.upper() else "GENERAL"
+        res = self.model.with_structured_output(QuestionType).invoke(resp.content)
+
+        question_type = "CM" if "CM" in res.type.upper() else "GENERAL"
         return {"question_type": question_type}
     
