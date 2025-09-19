@@ -116,8 +116,8 @@ class ChatCM:
         # Check if tool == UNKNOWN
         if res["tool"] == "UNKNOWN":
             return {
-                "messages": AIMessage(content=f"Your question is not related to RFI, Submittal or Inspection. {res['tool']}"),
-                "tool": "NO_VALID"
+                # "messages": AIMessage(content=f"Your question is not related to RFI, Submittal or Inspection. {res['tool']}"),
+                "tool": "UNKNOWN"
             }
 
         # Find not valid permission

@@ -16,10 +16,12 @@ QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME")
 EMBEDED_MODEL_NAME = os.getenv("EMBEDED_MODEL_NAME")
 NVIDIA_LLM_API_KEY = os.getenv("NVIDIA_LLM_API_KEY")
+OLLAMA_URL = os.getenv("OLLAMA_URL")
 
 def test_classifier():
     graph = QuestionClassifier(
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
+        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
     )
     agent = graph.build()
     
@@ -41,15 +43,18 @@ def test_general_assistant():
 
 def test_cm_supervisor():
     graph = CMSupervisor(
-        model=ChatOllama(model="qwen3:0.6b", temperature=0)
-        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatOllama(model="qwen3:1.7b", temperature=0),
     )
-    agent = graph.build()
+    agent = graph.build(checkpointer=MemorySaver())
     
     while True:
         question = input("#> ")
-        res = agent.invoke({"messages": [HumanMessage(content=question)]})
-        print(res)
+        for step in agent.stream({"messages": [HumanMessage(content=question)]}, 
+                                 stream_mode="values", 
+                                 config={"configurable": {"thread_id": "test-cm-supervisor"}}):
+            step["messages"][-1].pretty_print()
+        
+        print("Tool: ", step['tool'])
 
 def test_rfi_agent():
     # create an RFI agent
@@ -228,7 +233,7 @@ def test_inspection_agent():
 if __name__ == "__main__":
     # test_classifier()
     # test_general_assistant()
-    # test_cm_supervisor()
+    test_cm_supervisor()
     # test_rfi_agent()
     # test_submittal_agent()
-    test_inspection_agent()
+    # test_inspection_agent()
