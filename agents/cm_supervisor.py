@@ -112,7 +112,7 @@ class CMSupervisor:
     def answer_non_cm_tool(self, state: RouterState) -> RouterState:
         prompt = (
             "You are a Construction Management (CM) domain expert and SitearoundCM SaaS consultant in Thailand. Your task is to answer the incoming query.\n"
-            "You can use the provided **CHAT HISTORY**  and **search_tool** to infer intent.\n"
+            "You can use the provided **CHAT HISTORY** and **search_tool** to infer intent.\n"
             "DO NOT answer questions that are not related to construction management.\n\n"
             "QUERY:\n{query}\n"
         )
