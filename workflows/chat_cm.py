@@ -112,25 +112,14 @@ class ChatCM:
     def supervisor_node(self, state: MainState) -> MainState:
         res = self._supervisor_team.invoke({
             "messages": state["messages"],
+            "user": state["user"]
         })
-        # Check if tool == UNKNOWN
-        if res["tool"] == "UNKNOWN":
-            return {
-                # "messages": AIMessage(content=f"Your question is not related to RFI, Submittal or Inspection. {res['tool']}"),
-                "tool": "UNKNOWN"
-            }
 
-        # Find not valid permission
-        not_valid_tools = [pm.tool for pm in state['user'].tool_permissions if pm.level < 1]
-
-        # If res["tool"] (model's tool selected) in not_valid_tools. It means User not allowed to use res["tool"]
-        if res["tool"] in not_valid_tools:
-            return {  
-                "messages": AIMessage(content="User has no permission."),
-                "tool": "NO_VALID"
-            }
-
-        return {"tool": res["tool"]}
+        tool = res.get("tool")
+        if tool in (CMSupervisor.UNKNOWN, CMSupervisor.NO_VALID):
+            # Pass along the AIMessage so the conversation ends gracefully for these cases.
+            return {"messages": res["messages"][-1], "tool": tool}
+        return {"tool": tool}
     
     def rfi_node(self, state: MainState) -> MainState:
         res = self._rfi_team.invoke({
@@ -177,10 +166,11 @@ class ChatCM:
             "supervisor_node",
             lambda s: s['tool'],
             {
-                "RFI": "rfi_node",
-                "SUBMITTAL": "submittal_node",
-                "INSPECTION": "inspection_node",
-                "NO_VALID": END
+                CMSupervisor.RFI: "rfi_node",
+                CMSupervisor.SUBMITTAL: "submittal_node",
+                CMSupervisor.INSPECTION: "inspection_node",
+                CMSupervisor.UNKNOWN: END,
+                CMSupervisor.NO_VALID: END,
             }
         )
         g.add_edge("rfi_node", END)
