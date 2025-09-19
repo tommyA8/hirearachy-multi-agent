@@ -214,7 +214,7 @@ def chatcm_agent():
     graph.rfi_team = ToolAgentFactory.create(
        'rfi',
     #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       model=ChatNVIDIA(model="qwen/qwen3-coder-480b-a35b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=RFI_SQL_PROMPT,
@@ -223,7 +223,7 @@ def chatcm_agent():
     graph.submittal_team = ToolAgentFactory.create(
        'submittal',
     #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       model=ChatNVIDIA(model="qwen/qwen3-coder-480b-a35b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=SUBMITTAL_SQL_PROMPT,
@@ -232,7 +232,7 @@ def chatcm_agent():
     graph.inspection_team = ToolAgentFactory.create(
        'inspection',
     #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+       model=ChatNVIDIA(model="qwen/qwen3-coder-480b-a35b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
        db_docs_path=DB_DOCS,
        db_uri=POSTGRES_URI,
        sql_prompt=INSPECTION_SQL_PROMPT,
