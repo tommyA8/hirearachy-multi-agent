@@ -97,7 +97,7 @@ database_docs:
         - title: "[VARCHAR(255)] Title of this document"
         - type: "[INTEGER] ENUM type of this document (0 = RFI, 1 = Submittal, 2 = Inspection)"
         - process: "[INTEGER] ENUM for the process status of each document type (0 = Draft, 1 = Review, 2 = Open, 3 = Waiting for Manager, 4 = Closed)"
-        - status: "[INTEGER] ENUM for the task decision of each document type (0 = Invalid, 1 = Pending, 2 = In Process, 3 = Approved, 4 = Approved as Note, 5 = Rejected, 6 = Rejected as Note, 7 = Deleted)"
+        - status: "[INTEGER] ENUM for the task decision of each document type (-1 = Invalid, 0 = Pending, 1 = In Process, 2 = Approved, 3 = Approved as Note, 4 = Rejected, 5 = Rejected as Note, 6 = Deleted)"
         - due_date: "[TIMESTAMP] Due date of the document (applies to RFI, Submittal, and Inspection)"
         - schedule_impact: "[DOUBLE PRECISION] Number of days this document impacts the project schedule"
         - cost_impact: "[DOUBLE PRECISION] Amount this document impacts the project cost (default in USD)"
@@ -133,7 +133,7 @@ database_docs:
       enums:
         - type: "0 = RFI, 1 = Submittal, 2 = Inspection"
         - process: "0 = Draft, 1 = Review, 2 = Open, 3 = Waiting for Manager, 4 = Closed"
-        - status: "0 = Invalid, 1 = Pending, 2 = In Process, 3 = Approved, 4 = Approved as Note, 5 = Rejected, 6 = Rejected as Note, 7 = Deleted"
+        - status: "-1 = Invalid, 0 = Pending, 1 = In Process, 2 = Approved, 3 = Approved as Note, 4 = Rejected, 5 = Rejected as Note, 6 = Deleted"
 
     document_submittal:
       name: "document_submittal"
