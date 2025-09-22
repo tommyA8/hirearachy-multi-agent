@@ -120,33 +120,88 @@ class CMSupervisor:
         return {"messages": AIMessage(content=f"You do not have sufficient permission to access {requested} data. Please contact your administrator.")}
     
     def answer_non_cm_tool(self, state: RouterState) -> RouterState:
-        prompt = (
-            "You are a Construction Management (CM) domain expert and SitearoundCM SaaS consultant in Thailand. Your task is to answer the incoming query.\n"
-            "You can use the provided **CHAT HISTORY** and **search_tool** to infer intent.\n"
-            "DO NOT answer questions that are not related to construction management.\n\n"
-            "QUERY:\n{query}\n"
-        )
-        prompt = prompt.format(query=get_latest_question(state))
-        agent = create_react_agent(self.model, tools=[search_tool], prompt=prompt)
+        # prompt = (
+        #     "You are a Construction Management (CM) domain expert and SitearoundCM SaaS consultant in Thailand. Your task is to answer the incoming query.\n"
+        #     "You can use the provided **CHAT HISTORY** and **search_tool** to infer intent.\n"
+        #     "DO NOT answer questions that are not related to construction management.\n\n"
+        #     "QUERY:\n{query}\n"
+        # )
+        # prompt = prompt.format(query=get_latest_question(state))
+        # agent = create_react_agent(self.model, tools=[search_tool], prompt=prompt)
 
-        res = agent.invoke({"messages": state['messages']})
-        return {"messages": res['messages'][-1]}
-
+        # res = agent.invoke({"messages": state['messages']})
+        # return {"messages": res['messages'][-1]}
+        #TODO: NVIDIA LLM cannot handle ReAct well, so we fallback to a polite refusal for now
+        return {"messages": AIMessage(content="I'm sorry, I can only provide assistance with Construction Management topics such as projects, documents, schedules, RFIs, submittals, and related workflows.")}
+    
     @staticmethod
-    def parse_model_output(text: str) -> str:
+    def parse_model_output(text: str) -> str | None:
+        """Extract the CM tool label (RFI|SUBMITTAL|INSPECTION|UNKNOWN) from LLM output.
+
+        The ideal response is JSON:
+            {"tool": "RFI"}
+
+        But models may produce:
+          - Extra prose before/after JSON
+          - Markdown code fences ```json ... ```
+          - Multiple JSON objects
+          - Minor JSON issues (single quotes)
+          - A bare label like RFI
+
+        Returns the normalized upper-case label or None if extraction fails.
+        """
         if not text:
             return None
-        # find first JSON object occurrence
-        match = re.search(r"\{.*?\}", text, flags=re.S)
-        if not match:
-            return None
-        snippet = match.group(0)
-        try:
-            obj = json.loads(snippet)
-            candidate = obj.get('tool')
-            if isinstance(candidate, str):
-                return candidate
-        except Exception:
-            print("Failed to parse JSON")
-            return None
+
+        allowed = {"RFI", "SUBMITTAL", "INSPECTION", "UNKNOWN"}
+        text = text.strip()
+
+        # Remove surrounding code fences
+        fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.IGNORECASE | re.DOTALL)
+        if fenced:
+            text = fenced.group(1).strip()
+
+        upper_only = text.upper()
+        if upper_only in allowed:
+            return upper_only
+
+        # Collect candidate JSON snippets (shallow first)
+        candidates = [m.group(0) for m in re.finditer(r"\{[^{}]*\}", text, flags=re.DOTALL)]
+        if not candidates:
+            broad = re.findall(r"\{.*?\}", text, flags=re.DOTALL)
+            candidates.extend(broad[:3])
+
+        def try_parse(snippet: str):
+            try:
+                return json.loads(snippet)
+            except json.JSONDecodeError:
+                repaired = re.sub(r"'", '"', snippet)
+                try:
+                    return json.loads(repaired)
+                except Exception:
+                    return None
+            except Exception:
+                return None
+
+        for snip in candidates:
+            if 'tool' not in snip.lower():
+                continue
+            obj = try_parse(snip)
+            if isinstance(obj, dict):
+                val = obj.get('tool') or obj.get('Tool') or obj.get('TOOL')
+                if isinstance(val, str):
+                    val_up = val.strip().upper()
+                    if val_up in allowed:
+                        return val_up
+
+        # Regex heuristic "tool": <label>
+        m = re.search(r'"?tool"?\s*[:=]\s*"?(RFI|SUBMITTAL|INSPECTION|UNKNOWN)"?', text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).upper()
+
+        # Standalone token heuristic
+        token = re.search(r"\b(RFI|SUBMITTAL|INSPECTION|UNKNOWN)\b", text, flags=re.IGNORECASE)
+        if token:
+            return token.group(1).upper()
+
         return None
