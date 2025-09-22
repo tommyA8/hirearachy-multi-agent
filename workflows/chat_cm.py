@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 
 from agents import *
-from agents.cm_tool_agent import BaseToolAgent
+from agents.cm_tool_agent import RFIAgent, SubmittalAgent, InspectionAgent
 from utils import fetch_permission_tools, get_latest_question
 from model.user import UserContext, Permission
 from model.cm_tools import CMTools
@@ -66,15 +66,15 @@ class ChatCM:
         self._supervisor_team = graph.build()
 
     @rfi_team.setter
-    def rfi_team(self, graph: BaseToolAgent):
+    def rfi_team(self, graph: RFIAgent):
         self._rfi_team = graph.build()
 
     @submittal_team.setter
-    def submittal_team(self, graph: BaseToolAgent):
+    def submittal_team(self, graph: SubmittalAgent):
         self._submittal_team = graph.build()
 
     @inspection_team.setter
-    def inspection_team(self, graph: BaseToolAgent):
+    def inspection_team(self, graph: InspectionAgent):
         self._inspection_team = graph.build()
 
     def classifier_node(self, state: MainState) -> MainState:
@@ -198,45 +198,40 @@ def chatcm_agent():
     graph = ChatCM()
     
     graph.question_classifier = QuestionClassifier(
-        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
-        # model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        # model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
+        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         )
     
     graph.general_assistant_team = GeneralAssistant(
         model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-        # model=ChatOllama(model="qwen3:4b", temperature=0.2, base_url=OLLAMA_URL)
         )
     
     graph.supervisor_team = CMSupervisor(
         model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
         ) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
     
-    graph.rfi_team = ToolAgentFactory.create(
-       'rfi',
-    #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-       db_docs_path=DB_DOCS,
-       db_uri=POSTGRES_URI,
-       sql_prompt=RFI_SQL_PROMPT,
-       default_tables = ['document_document', "company_company", "project_project"]
+    graph.rfi_team = RFIAgent(
+        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        db_docs_path=DB_DOCS,
+        db_uri=POSTGRES_URI,
+        sql_prompt=SUBMITTAL_SQL_PROMPT,
+        default_tables = ['document_document', "company_company", "project_project"]
     )
-    graph.submittal_team = ToolAgentFactory.create(
-       'submittal',
-    #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-       db_docs_path=DB_DOCS,
-       db_uri=POSTGRES_URI,
-       sql_prompt=SUBMITTAL_SQL_PROMPT,
-       default_tables = ['document_document', "company_company", "project_project", "document_submittal"]
+    
+    graph.submittal_team = SubmittalAgent(
+        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        db_docs_path=DB_DOCS,
+        db_uri=POSTGRES_URI,
+        sql_prompt=SUBMITTAL_SQL_PROMPT,
+        default_tables = ['document_document', "company_company", "project_project", "document_submittal"]
     )
-    graph.inspection_team = ToolAgentFactory.create(
-       'inspection',
-    #    model=ChatOllama(model="qwen2.5:7b", temperature=0.2, base_url=OLLAMA_URL),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-       db_docs_path=DB_DOCS,
-       db_uri=POSTGRES_URI,
-       sql_prompt=INSPECTION_SQL_PROMPT,
-       default_tables = ['document_document', "company_company", "project_project", "document_inspection"]
+
+    graph.inspection_team = InspectionAgent(
+        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        db_docs_path=DB_DOCS,
+        db_uri=POSTGRES_URI,
+        sql_prompt=INSPECTION_SQL_PROMPT,
+        default_tables = ['document_document', "company_company", "project_project", "document_inspection"]
     )
 
     return graph.build(checkpointer=MemorySaver(), save_graph=False)
