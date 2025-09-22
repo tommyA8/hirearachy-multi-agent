@@ -45,7 +45,13 @@ class BaseToolAgent(ABC):
         self.default_tables = default_tables or ['document_document', "company_company", "project_project"]
         self.default_table_info = self.get_db_info(self.db_docs_path, self.default_tables)
         
-        self._sql_prompt: str = sql_prompt
+        self._sql_prompt: str = sql_prompt + (
+            "\nSTRICT FORMAT RULES:\n"
+            "- Output exactly ONE {dialect} SELECT statement ending with a semicolon.\n"
+            "- No code fences, no commentary, no JSON, no markdown.\n"
+            "- Must include required JOINs and mandatory WHERE filters.\n"
+            "- Single-line preferred; collapse excessive whitespace.\n"
+        )
         self._answer_prompt = (
             "You are an Help Desk Assistant for a Construction Management (CM) system.\n"
             "You will be given:\n"
@@ -156,17 +162,20 @@ class BaseToolAgent(ABC):
             question=get_latest_question(state),
             table_info=self.default_table_info,
         )
-        # Harden instructions a bit (idempotent if user already added similar)
-        if "SELECT" not in base_prompt.upper():
-            base_prompt += "\nReturn only a single valid SELECT statement."
         try:
-            res = self.model.invoke([SystemMessage(content=base_prompt)] + state["messages"])
-            sql_text = getattr(res, "content", "")
+            res = self.model.invoke([SystemMessage(content=base_prompt)] + state['messages'])
+            raw_text = getattr(res, 'content', '') or ''
         except Exception as e:
             return {"generated_sql": f"ERROR: Failed to generate SQL: {e}"}
 
-        sql_text = (sql_text or "").strip().strip('`')
-        return {"generated_sql": sql_text}
+        # Attempt JSON parse first
+        sql = self._parse_json_sql(raw_text)
+        if not sql:
+            # Fallback: heuristic extraction
+            sql = self._extract_sql(raw_text)
+
+        sql = (sql or '').strip()
+        return {"generated_sql": sql}
 
     def execute_query(self, state: SQLState) -> SQLState:
         """Execute generated SQL if valid; restrict to simple SELECT statements.
@@ -212,18 +221,70 @@ class BaseToolAgent(ABC):
         return {"messages": ai_message}
 
     @staticmethod
-    def _is_select_statement(sql: str) -> bool:
-        """Very lightweight validation ensuring the statement is a single SELECT.
+    def _parse_json_sql(text: str):
+        import json, re
+        if not text:
+            return None
+        # find first JSON object occurrence
+        match = re.search(r"\{.*?\}", text, flags=re.S)
+        if not match:
+            return None
+        snippet = match.group(0)
+        try:
+            obj = json.loads(snippet)
+            candidate = obj.get('sql')
+            if isinstance(candidate, str):
+                return candidate
+        except Exception:
+            return None
+        return None
+    
+    @staticmethod
+    def _extract_sql(text: str) -> str:
+        """Attempt to isolate a single SQL statement from model output.
 
-        Rejects statements containing semicolons (multiple queries) or modifying verbs.
-        This is heuristic, not a full SQL parser.
+        Preference order:
+          1. Fenced ```sql blocks
+          2. Generic fenced blocks
+          3. First SELECT ... pattern
+        Returns empty string if no plausible SQL fragment found.
         """
-        sql_clean = re.sub(r"\s+", " ", sql).strip().lower()
-
-        if not sql_clean.startswith("select"):
+        if not text:
+            return ""
+        # Fenced with language
+        code_block = re.search(r"```sql\s+(.*?)```", text, flags=re.S | re.I)
+        if code_block:
+            return code_block.group(1).strip()
+        # Generic fenced
+        code_block = re.search(r"```\s*(.*?)```", text, flags=re.S | re.I)
+        if code_block:
+            return code_block.group(1).strip()
+        # First SELECT ... ; try to capture up to semicolon
+        sql_like = re.search(r"SELECT\s.+?(;|$)", text, flags=re.S | re.I)
+        if sql_like:
+            return sql_like.group(0).strip()
+        return ""
+    
+    @staticmethod
+    def _is_select_statement(sql: str) -> bool:
+        if not sql:
             return False
-        forbidden = [" update ", " delete ", " insert ", " drop ", " alter ", " create "]
-        return not any(tok in sql_clean for tok in forbidden)
+        sql_stripped = sql.strip()
+        # Normalize whitespace for scanning
+        lowered = re.sub(r"\s+", " ", sql_stripped).lower()
+        if not lowered.startswith("select"):
+            return False
+        forbidden = [" update ", " delete ", " insert ", " drop ", " alter ", " create ", " truncate "]
+        if any(f in lowered for f in forbidden):
+            return False
+        # Multi-statement detection: more than one semicolon or trailing content after first semicolon
+        semicolons = sql_stripped.count(";")
+        if semicolons > 1:
+            return False
+        if semicolons == 1 and not re.match(r"^.*;\s*$", sql_stripped):
+            # Content after semicolon
+            return False
+        return True
 
 
 class ToolAgentFactory:

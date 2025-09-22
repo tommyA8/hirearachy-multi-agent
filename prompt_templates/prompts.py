@@ -13,7 +13,7 @@ RFI_SQL_PROMPT = (
     "- Only reference tables/columns from DATABASE INFORMATION.\n"
     "- Default projection if unspecified: d.code, d.title, d.created_at.\n"
     "- Absolutely NO data modification (SELECT only, no subqueries that modify, no DDL/DML).\n"
-    "- Output must be a single plain SQL statement (no backticks, no explanation).\n\n"
+    "- Output must be a SQL Json object (no backticks, no explanation).\n\n"
     "EXAMPLES (Patterns Only)\n"
     "-- Latest 10 RFIs\n"
     "SELECT d.code, d.title, d.created_at FROM document_document AS d\n"
