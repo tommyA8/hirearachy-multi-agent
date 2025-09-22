@@ -52,21 +52,83 @@ class QuestionClassifier:
         return {"question_type": question_type.type}
     
     @staticmethod
-    def parse_model_output(text: str) -> str:
+    def parse_model_output(text: str) -> str | None:
+        """Extract the classification type (CM|GENERAL) from an LLM response.
+
+        The model SHOULD return a JSON block like:
+            {"type": "CM"}
+
+        However, in practice the response may contain:
+        - Extra prose before/after JSON
+        - Markdown code fences ```json ... ```
+        - Multiple JSON objects
+        - Minor JSON issues like single quotes
+        - A bare label like CM or GENERAL
+
+        This function attempts to robustly extract and normalize the value.
+        Returns the upper‑cased label (CM|GENERAL) or None if not found.
+        """
         if not text:
             return None
-        # find first JSON object occurrence
-        match = re.search(r"\{.*?\}", text, flags=re.S)
-        if not match:
-            return None
-        snippet = match.group(0)
-        try:
-            obj = json.loads(snippet)
-            candidate = obj.get('type')
-            if isinstance(candidate, str):
-                return candidate
-        except Exception:
-            print("Failed to parse JSON")
-            return None
+
+        allowed = {"CM", "GENERAL"}
+
+        # 1. Strip leading/trailing whitespace
+        text = text.strip()
+
+        # 2. Remove surrounding markdown code fences if present
+        fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.IGNORECASE | re.DOTALL)
+        if fenced:
+            text = fenced.group(1).strip()
+
+        # 3. Quick path: if response is just the label
+        upper_clean = text.upper()
+        if upper_clean in allowed:
+            return upper_clean
+
+        # 4. Find all lightweight JSON object snippets and try to parse those containing 'type'
+        # Use a non-greedy brace match; this is imperfect but usually sufficient for small structured outputs
+        candidates = [m.group(0) for m in re.finditer(r"\{[^{}]*\}" , text, flags=re.DOTALL)]
+
+        # Fallback: also include larger matches if nothing small found (first balanced-ish block)
+        if not candidates:
+            broad = re.findall(r"\{.*?\}", text, flags=re.DOTALL)
+            candidates.extend(broad[:3])  # limit attempts
+
+        def try_parse_json(snippet: str):
+            try:
+                return json.loads(snippet)
+            except json.JSONDecodeError:
+                # Attempt a minimal repair: replace single quotes with double IF it looks like simple JSON
+                simple = re.sub(r"'", '"', snippet)
+                try:
+                    return json.loads(simple)
+                except Exception:
+                    return None
+            except Exception:
+                return None
+
+        for snippet in candidates:
+            if 'type' not in snippet:
+                continue
+            obj = try_parse_json(snippet)
+            if not isinstance(obj, dict):
+                continue
+            val = obj.get('type') or obj.get('Type') or obj.get('TYPE')
+            if isinstance(val, str):
+                val_up = val.strip().upper()
+                if val_up in allowed:
+                    return val_up
+
+        # 5. Heuristic: search for "type": <label>
+        m = re.search(r'"?type"?\s*[:=]\s*"?(CM|GENERAL)"?', text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).upper()
+
+        # 6. Final fallback: look for standalone allowed tokens
+        token_match = re.search(r"\b(CM|GENERAL)\b", text, flags=re.IGNORECASE)
+        if token_match:
+            return token_match.group(1).upper()
+
         return None
     
