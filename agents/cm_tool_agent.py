@@ -1,5 +1,6 @@
 import yaml
 import re
+import json
 from abc import ABC
 from typing import Dict, List, Optional
 from sqlalchemy import create_engine
@@ -45,30 +46,25 @@ class BaseToolAgent(ABC):
         self.default_tables = default_tables or ['document_document', "company_company", "project_project"]
         self.default_table_info = self.get_db_info(self.db_docs_path, self.default_tables)
         
-        self._sql_prompt: str = sql_prompt + (
-            "\nSTRICT FORMAT RULES:\n"
-            "- Output exactly ONE {dialect} SELECT statement ending with a semicolon.\n"
-            "- No code fences, no commentary, no JSON, no markdown.\n"
-            "- Must include required JOINs and mandatory WHERE filters.\n"
-            "- Single-line preferred; collapse excessive whitespace.\n"
-        )
+        self._sql_prompt: str = sql_prompt
         self._answer_prompt = (
-            "You are an Help Desk Assistant for a Construction Management (CM) system.\n"
+            "You are a Help Desk Assistant for a Construction Management (CM) system.\n"
             "You will be given:\n"
             "  1. A natural-language QUESTION.\n"
             "  2. The executed SQL QUERY.\n"
             "  3. TABLE INFORMATION describing the schema.\n"
             "  4. The RESULT of the SQL query.\n\n"
-            "Your task: read the SQL and RESULT, understand the context, and produce a clear, concise factual answer to the QUESTION.\n\n"
+            "Your task: read the SQL and RESULT, understand the context, and produce a clear, concise, factual answer to the QUESTION in tabular form.\n\n"
             "SQL QUERY: {sql}\n"
             "TABLE INFORMATION: {table_info}\n"
             "RESULT: {result}\n\n"
-            "Instructions:\n"
+            "STRICT FORMAT RULES:\n"
+            "- Do not reveal the user about the SQL or Technical Details (e.g., Enum, EnumValue, etc).\n"
             "- Answer in plain English, concise and short.\n"
-            "- If RESULT is empty, respond that you are unable to answer.\n"
+            "- If RESULT is empty or null, respond that you are unable to answer.\n"
+            "- If the QUESTION asks for a list or table, format your answer as a numbered list or Markdown table.\n"
             "- Do not repeat the SQL query text.\n"
             "- Do not hallucinate columns or values.\n"
-            "- Do not tell the user aout the SQL.\n"
             "- Summarize multiple rows succinctly.\n\n"
             "QUESTION:\n{question}\n\n"
             "FINAL ANSWER:"
@@ -221,8 +217,7 @@ class BaseToolAgent(ABC):
         return {"messages": ai_message}
 
     @staticmethod
-    def _parse_json_sql(text: str):
-        import json, re
+    def _parse_json_sql(text: str) -> str:
         if not text:
             return None
         # find first JSON object occurrence
