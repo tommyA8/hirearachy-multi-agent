@@ -1,3 +1,5 @@
+import re
+import json
 from typing import Literal
 from pydantic import BaseModel
 from langchain_ollama import ChatOllama
@@ -46,8 +48,15 @@ class CMSupervisor:
             "- SUBMITTAL: Review/approval of materials, shop drawings, product data.\n"
             "- INSPECTION: Field inspections, photos, comments, corrective actions.\n"
             "- UNKNOWN: None of the above.\n\n"
-            "Use ONLY the chat history for context. Respond with a SINGLE WORD: one of RFI, SUBMITTAL, INSPECTION, UNKNOWN.\n"
+            "Use ONLY the chat history for context.\n\n"
             "LATEST QUERY:\n{query}\n"
+            "You must respond ONLY in the following strict JSON format:\n"
+            "```json\n"
+            "{{\n"
+            "  \"tool\": \"RFI\" or \"SUBMITTAL\" or \"INSPECTION\" or \"UNKNOWN\",\n"
+            "}}\n"
+            "```\n"
+            "Do not include any text outside the JSON.\n"
         )
 
     def build(self, checkpointer=None):
@@ -81,7 +90,8 @@ class CMSupervisor:
         """
         prompt = self.prompt.format(query=get_latest_question(state))
         try:
-            tool_res = self.structured_model.invoke([SystemMessage(content=prompt)] + state["messages"])
+            resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+            tool_res = Tools(tool=self.parse_model_output(resp.content))
             chosen = getattr(tool_res, "tool", None)
         except Exception:
             chosen = None
@@ -122,3 +132,21 @@ class CMSupervisor:
         res = agent.invoke({"messages": state['messages']})
         return {"messages": res['messages'][-1]}
 
+    @staticmethod
+    def parse_model_output(text: str) -> str:
+        if not text:
+            return None
+        # find first JSON object occurrence
+        match = re.search(r"\{.*?\}", text, flags=re.S)
+        if not match:
+            return None
+        snippet = match.group(0)
+        try:
+            obj = json.loads(snippet)
+            candidate = obj.get('tool')
+            if isinstance(candidate, str):
+                return candidate
+        except Exception:
+            print("Failed to parse JSON")
+            return None
+        return None
