@@ -209,7 +209,7 @@ def chatcm_agent():
         )
     
     graph.rfi_team = RFIAgent(
-        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         db_docs_path=DB_DOCS,
         db_uri=POSTGRES_URI,
         sql_prompt=RFI_SQL_PROMPT,
@@ -217,7 +217,7 @@ def chatcm_agent():
     )
     
     graph.submittal_team = SubmittalAgent(
-        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         db_docs_path=DB_DOCS,
         db_uri=POSTGRES_URI,
         sql_prompt=SUBMITTAL_SQL_PROMPT,
@@ -225,7 +225,7 @@ def chatcm_agent():
     )
 
     graph.inspection_team = InspectionAgent(
-        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         db_docs_path=DB_DOCS,
         db_uri=POSTGRES_URI,
         sql_prompt=INSPECTION_SQL_PROMPT,
