@@ -1,3 +1,5 @@
+import re
+import json
 from typing import Literal
 from pydantic import BaseModel
 from langchain_ollama import ChatOllama
@@ -10,7 +12,7 @@ from model.user import UserContext
 
 class Tools(BaseModel):
     """Pydantic schema for structured tool classification output."""
-    tool: Literal["RFI", "SUBMITTAL", "INSPECTION", "UNKNOWN"]
+    tool: Literal["RFI", "SUBMITTAL", "INSPECTION", "NEED_MORE_CNTX", "NON_CM_TOOL"]
 
 class RouterState(MessagesState):
     tool: str
@@ -18,36 +20,35 @@ class RouterState(MessagesState):
     
 
 class CMSupervisor:
-    """Routes a CM-related user query to the appropriate CM tool or fallback.
-
-    Flow:
-      1. Classify latest user question into one of (RFI, SUBMITTAL, INSPECTION, UNKNOWN).
-      2. Check user permission; if insufficient return NO_VALID sentinel.
-      3. For UNKNOWN -> fallback ReAct QA with search tool restricted to CM domain.
-    """
-
-    # Canonical tool labels and sentinels
     RFI = "RFI"
     SUBMITTAL = "SUBMITTAL"
     INSPECTION = "INSPECTION"
-    UNKNOWN = "UNKNOWN"
+    NEED_MORE_CNTX = "NEED_MORE_CNTX"
+    NON_CM_TOOL = "NON_CM_TOOL"
     NO_VALID = "NO_VALID"
-    VALID_TOOLS = {RFI, SUBMITTAL, INSPECTION, UNKNOWN}
+    VALID_TOOLS = {RFI, SUBMITTAL, INSPECTION, NEED_MORE_CNTX, NON_CM_TOOL}
 
     def __init__(self, model: ChatOllama):
         self.model = model
-        self.structured_model = self.model.with_structured_output(Tools)
-        # Prompt explicitly includes UNKNOWN and mandated single token answer
         self.prompt = (
-            "You are a Construction Management (CM) domain expert. Classify the latest user query into EXACTLY one CM tool label.\n"
-            "Allowed labels: RFI, SUBMITTAL, INSPECTION, UNKNOWN.\n"
+            "You are a Construction Management (CM) domain expert. Classify the user query into EXACTLY one CM tool label.\n"
+            "You can use the provided **CHAT HISTORY** to infer intent.\n"
+            "Allowed labels: RFI, SUBMITTAL, INSPECTION, NEED_MORE_CNTX, NON_CM_TOOL.\n"
             "Definitions:\n"
             "- RFI: Formal clarification workflow (deadlines, tracking).\n"
             "- SUBMITTAL: Review/approval of materials, shop drawings, product data.\n"
             "- INSPECTION: Field inspections, photos, comments, corrective actions.\n"
-            "- UNKNOWN: None of the above.\n\n"
-            "Use ONLY the chat history for context. Respond with a SINGLE WORD: one of RFI, SUBMITTAL, INSPECTION, UNKNOWN.\n"
+            "- NEED_MORE_CNTX: The user's latest query seems ambiguous or lacks sufficient context to classify.\n"
+            "- NON_CM_TOOL: None of the above.\n\n"
+            "Use ONLY the chat history for context.\n\n"
             "LATEST QUERY:\n{query}\n"
+            "You must respond ONLY in the following strict JSON format:\n"
+            "```json\n"
+            "{{\n"
+            "  \"tool\": \"RFI\" or \"SUBMITTAL\" or \"INSPECTION\" or \"NEED_MORE_CNTX\" or \"NON_CM_TOOL\",\n"
+            "}}\n"
+            "```\n"
+            "Do not include any text outside the JSON.\n"
         )
 
     def build(self, checkpointer=None):
@@ -56,49 +57,42 @@ class CMSupervisor:
         g.add_node("check_permission_node", self.check_permission)
         g.add_node("answer_no_permission_node", self.answer_no_permission)
         g.add_node("answer_non_cm_tool", self.answer_non_cm_tool)
+        g.add_node("ask_for_more_context_node", self.ask_for_more_context)
 
         g.add_edge(START, "cm_tool_router_node")
-        g.add_edge("cm_tool_router_node", "check_permission_node")
         g.add_conditional_edges(
-            "check_permission_node",
+            "cm_tool_router_node",
             lambda s: s['tool'],
             {
-                "NO_VALID": "answer_no_permission_node",
-                "UNKNOWN": "answer_non_cm_tool", 
-                "RFI": END, "SUBMITTAL": END, "INSPECTION": END
+                self.RFI: "check_permission_node",
+                self.SUBMITTAL: "check_permission_node",
+                self.INSPECTION: "check_permission_node",
+                self.NON_CM_TOOL: "answer_non_cm_tool",
+                self.NEED_MORE_CNTX: "ask_for_more_context_node",
             }
         )
+        g.add_edge("check_permission_node", END)
         g.add_edge("answer_no_permission_node", END)
         g.add_edge("answer_non_cm_tool", END)
+        g.add_edge("ask_for_more_context_node", END)
 
         return g.compile(checkpointer) if checkpointer is not None else g.compile()
 
     def cm_tool_router(self, state: RouterState) -> RouterState:
-        """Invoke the LLM to classify the latest question.
-
-        Returns only the chosen tool label. Falls back to UNKNOWN on any failure
-        or invalid model output.
-        """
         prompt = self.prompt.format(query=get_latest_question(state))
         try:
-            tool_res = self.structured_model.invoke([SystemMessage(content=prompt)] + state["messages"])
+            resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+            tool_res = Tools(tool=self.parse_model_output(resp.content, self.VALID_TOOLS))
             chosen = getattr(tool_res, "tool", None)
         except Exception:
             chosen = None
 
         if chosen not in self.VALID_TOOLS:
-            chosen = self.UNKNOWN
+            chosen = self.NON_CM_TOOL
 
         return {"tool": chosen}
     
     def check_permission(self, state: RouterState) -> RouterState:
-        """Map disallowed tool selection to NO_VALID sentinel.
-
-        A tool is disallowed if user's permission level < 1. UNKNOWN bypasses permission.
-        """
-        if state.get("tool") == self.UNKNOWN:
-            return {"tool": self.UNKNOWN}
-
         not_valid_tools = [pm.tool for pm in state["user"].tool_permissions if pm.level < 1]
         if state["tool"] in not_valid_tools:
             return {"tool": self.NO_VALID}
@@ -117,8 +111,73 @@ class CMSupervisor:
             "QUERY:\n{query}\n"
         )
         prompt = prompt.format(query=get_latest_question(state))
-        agent = create_react_agent(self.model, tools=[search_tool], prompt=prompt)
+        res = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
 
-        res = agent.invoke({"messages": state['messages']})
-        return {"messages": res['messages'][-1]}
+        return {"messages": res.content, "tool": state["tool"]}
+    
+    def ask_for_more_context(self, state: RouterState) -> RouterState:
+        prompt = (
+            "The user's latest query seems ambiguous or lacks sufficient context to classify.\n"
+            "Please ask a clarifying question to gather more details about their intent.\n\n"
+            "LATEST QUERY:\n{query}\n\n"
+            "Your clarifying question should be concise and directly related to understanding whether the query is about construction management (CM) or general topics.\n"
+        ).format(query=get_latest_question(state))
+        
+        resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+                
+        return {"messages": resp.content, "tool": self.NEED_MORE_CNTX}
+    
+    @staticmethod
+    def parse_model_output(text: str, allowed: set[str]) -> str | None:
+        if not text:
+            return None
 
+        text = text.strip()
+
+        fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.IGNORECASE | re.DOTALL)
+        if fenced:
+            text = fenced.group(1).strip()
+
+        upper_only = text.upper()
+        if upper_only in allowed:
+            return upper_only
+
+        candidates = [m.group(0) for m in re.finditer(r"\{[^{}]*\}", text, flags=re.DOTALL)]
+        if not candidates:
+            broad = re.findall(r"\{.*?\}", text, flags=re.DOTALL)
+            candidates.extend(broad[:3])
+
+        def try_parse(snippet: str):
+            try:
+                return json.loads(snippet)
+            except json.JSONDecodeError:
+                repaired = re.sub(r"'", '"', snippet)
+                try:
+                    return json.loads(repaired)
+                except Exception:
+                    return None
+            except Exception:
+                return None
+
+        for snip in candidates:
+            if 'tool' not in snip.lower():
+                continue
+            obj = try_parse(snip)
+            if isinstance(obj, dict):
+                val = obj.get('tool') or obj.get('Tool') or obj.get('TOOL')
+                if isinstance(val, str):
+                    val_up = val.strip().upper()
+                    if val_up in allowed:
+                        return val_up
+
+        # Regex heuristic "tool": <label>
+        m = re.search(r'"?tool"?\s*[:=]\s*"?(RFI|SUBMITTAL|INSPECTION|NEED_MORE_CNTX|NON_CM_TOOL)"?', text, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).upper()
+
+        # Standalone token heuristic
+        token = re.search(r"\b(RFI|SUBMITTAL|INSPECTION|NEED_MORE_CNTX|NON_CM_TOOL)\b", text, flags=re.IGNORECASE)
+        if token:
+            return token.group(1).upper()
+
+        return None

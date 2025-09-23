@@ -1,6 +1,6 @@
 import warnings
 warnings.filterwarnings("ignore")
-
+from typing import Literal, Optional
 from langchain_ollama import ChatOllama
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.checkpoint.memory import MemorySaver
@@ -23,7 +23,6 @@ class MainState(MessagesState):
 class ChatCM:
     def __init__(self):
         self._question_classifier = None
-        self._general_assistant_team = None
         self._supervisor_team = None
         self._rfi_team = None
         self._submittal_team = None
@@ -32,10 +31,6 @@ class ChatCM:
     @property
     def question_classifier(self):
         return self._question_classifier
-    
-    @property
-    def general_assistant_team(self):
-        return self._general_assistant_team
     
     @property
     def supervisor_team(self):
@@ -56,10 +51,6 @@ class ChatCM:
     @question_classifier.setter
     def question_classifier(self, graph: QuestionClassifier):
         self._question_classifier = graph.build()
-
-    @general_assistant_team.setter
-    def general_assistant_team(self, graph: GeneralAssistant):
-        self._general_assistant_team = graph.build()
 
     @supervisor_team.setter
     def supervisor_team(self, graph: CMSupervisor):
@@ -82,15 +73,8 @@ class ChatCM:
             "messages": state["messages"]
         })
         return {
+            "messages": res["messages"][-1],
             "question_type": res["question_type"]
-        }
-    
-    def general_assistant_node(self, state: MainState) -> MainState:
-        res = self._general_assistant_team.invoke({
-            "messages": state["messages"]
-        })
-        return {
-            "messages": res["messages"][-1]
         }
 
     def get_tool_permissions_node(self, state: MainState) -> MainState:
@@ -107,7 +91,10 @@ class ChatCM:
             state['user'].tool_permissions = [Permission(level=level, tool=tool.upper())
                                               for level, tool in res if tool.upper() in tool_names]
 
-        return {"user": state['user']}
+        return {
+            "messages": state['messages'][-1],
+            "user": state['user']
+        }
 
     def supervisor_node(self, state: MainState) -> MainState:
         res = self._supervisor_team.invoke({
@@ -116,14 +103,23 @@ class ChatCM:
         })
 
         tool = res.get("tool")
-        if tool in (CMSupervisor.UNKNOWN, CMSupervisor.NO_VALID):
+        if tool in (CMSupervisor.NON_CM_TOOL, CMSupervisor.NO_VALID, CMSupervisor.NEED_MORE_CNTX):
             # Pass along the AIMessage so the conversation ends gracefully for these cases.
-            return {"messages": res["messages"][-1], "tool": tool}
-        return {"tool": tool}
+            return {
+                "messages": res["messages"][-1],
+                "tool": tool, 
+                "user": state["user"]
+            }
+        return {
+            "messages": state['messages'],
+            "tool": tool,
+            "user": state["user"]
+        }
     
     def rfi_node(self, state: MainState) -> MainState:
         res = self._rfi_team.invoke({
-            "messages": state['messages']
+            "messages": state['messages'],
+            'user': state['user']
         })
         return {
             "messages": res['messages'][-1]
@@ -131,7 +127,8 @@ class ChatCM:
     
     def submittal_node(self, state: MainState) -> MainState:
         res = self._submittal_team.invoke({
-            "messages": state['messages']
+            "messages": state['messages'],
+            'user': state['user']
         })
         return {
             "messages": res['messages'][-1]
@@ -139,7 +136,8 @@ class ChatCM:
     
     def inspection_node(self, state: MainState) -> MainState:
         res = self._inspection_team.invoke({
-            "messages": state['messages']
+            "messages": state['messages'],
+            'user': state['user']
         })
         return {
             "messages": res['messages'][-1]
@@ -148,7 +146,6 @@ class ChatCM:
     def build(self, checkpointer, save_graph=False):
         g = StateGraph(MainState)
         g.add_node("classifier_node", self.classifier_node)
-        g.add_node("general_assistant_node", self.general_assistant_node)
         g.add_node("get_tool_permissions_node", self.get_tool_permissions_node)
         g.add_node("supervisor_node", self.supervisor_node)
         g.add_node("rfi_node", self.rfi_node)
@@ -159,7 +156,11 @@ class ChatCM:
         g.add_conditional_edges(
             "classifier_node",
             lambda s: s['question_type'],
-            {"CM": "get_tool_permissions_node", "GENERAL": "general_assistant_node"}
+            {
+                QuestionClassifier.CM: "get_tool_permissions_node", 
+                QuestionClassifier.GENERAL: END,
+                QuestionClassifier.NEED_MORE_CNTX: END
+            }
         )
         g.add_edge("get_tool_permissions_node", "supervisor_node")
         g.add_conditional_edges(
@@ -169,8 +170,9 @@ class ChatCM:
                 CMSupervisor.RFI: "rfi_node",
                 CMSupervisor.SUBMITTAL: "submittal_node",
                 CMSupervisor.INSPECTION: "inspection_node",
-                CMSupervisor.UNKNOWN: END,
-                CMSupervisor.NO_VALID: END,
+                CMSupervisor.NON_CM_TOOL: END,
+                CMSupervisor.NEED_MORE_CNTX: END,
+                CMSupervisor.NO_VALID: END
             }
         )
         g.add_edge("rfi_node", END)
@@ -191,30 +193,26 @@ class ChatCM:
                 f.write(png_bytes)
             print("Saved graph diagram to graph.png")
         except Exception as e:
-            print(f"Could not render graph diagram: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 def chatcm_agent():
     graph = ChatCM()
     
     graph.question_classifier = QuestionClassifier(
-        # model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-        )
-    
-    graph.general_assistant_team = GeneralAssistant(
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
+        model=ChatNVIDIA(model="qwen/qwen3-next-80b-a3b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         )
     
     graph.supervisor_team = CMSupervisor(
-        model=ChatOllama(model="qwen3:4b", temperature=0, base_url=OLLAMA_URL)
-        ) # NOTE: Cannot ChatNVIDIA cannot use .with_structured_output
+        model=ChatNVIDIA(model="qwen/qwen3-next-80b-a3b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
+        )
     
     graph.rfi_team = RFIAgent(
         model=ChatNVIDIA(model="meta/llama-3.3-70b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
         db_docs_path=DB_DOCS,
         db_uri=POSTGRES_URI,
-        sql_prompt=SUBMITTAL_SQL_PROMPT,
+        sql_prompt=RFI_SQL_PROMPT,
         default_tables = ['document_document', "company_company", "project_project"]
     )
     
