@@ -16,7 +16,7 @@ from langchain_core.messages import HumanMessage
 
 from agents import *
 from model.user import UserContext
-from workflows.chat_cm import ChatCM
+from workflows.chat_cm import chatcm_agent
 
 POSTGRES_URI = os.getenv("POSTGRES_URI")
 QDRANT_URL = os.getenv("QDRANT_URL")
@@ -45,35 +45,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def init_agent():
-    graph = ChatCM()
-    graph.question_classifier = QuestionClassifier(
-        # model= ChatOllama(model="qwen3:0.6b", temperature=0.1),
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
-       )
-    graph.general_assistant_team = GeneralAssistant(
-    #    model= ChatOllama(model="qwen3:0.6b", temperature=0.1),
-       model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0.2, api_key=NVIDIA_LLM_API_KEY),
-       )
-    graph.supervisor_team = CMSupervisor(
-        # model= ChatOllama(model="qwen3:0.6b", temperature=0.1),
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
-    )
-    graph.rfi_team = RFIAgent(
-        # model= ChatOllama(model="qwen3:0.6b", temperature=0.1),
-        model=ChatNVIDIA(model="qwen/qwen2.5-7b-instruct", temperature=0, api_key=NVIDIA_LLM_API_KEY),
-        yaml_path="docs/cm_db_knowledge.yaml",
-        db_uri=POSTGRES_URI
-    )
-    # Building the agent
-    memory = MemorySaver()
-    return graph.build(checkpointer=memory)
-
 def make_thread_id(s: ChatSession) -> str:
     # Deterministic per user/company/project unless overridden
     return s.thread_id if s.thread_id else str(uuid.uuid4())
 
-agent = init_agent()
+agent = chatcm_agent()
 
 @app.get("/healthz")
 def healthz():
