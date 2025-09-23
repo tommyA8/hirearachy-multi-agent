@@ -1,27 +1,33 @@
 import json
 import re
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, ValidationError
 from langchain_ollama import ChatOllama
-from langchain_core.messages import  SystemMessage
+from langchain_core.messages import  SystemMessage, AIMessage
 from langgraph.graph import StateGraph, START, END, MessagesState
 from utils.get_latest_question import get_latest_question
 
 class QuestionType(BaseModel):
-    type: Literal['CM', 'GENERAL', None]
+    type: Optional[Literal['CM', 'GENERAL', 'NEED_MORE_CNTX']]
 
 class QuestionTypeState(MessagesState):
     question_type: str
 
 class QuestionClassifier:
+    CM = "CM"
+    GENERAL = "GENERAL"
+    NEED_MORE_CNTX = "NEED_MORE_CNTX"
+    VALID_TYPES = {CM, GENERAL, NEED_MORE_CNTX}
+
     def __init__(self, model: ChatOllama):
         self.model = model
         self.prompt = (
-            "You are a domain expert in Construction Management (CM). "
+            "You are a domain expert in Construction Management (CM).\n"
             "Your task is to classify the user's latest query based on its intent.\n\n"
             "Classification Types (choose exactly one):\n"
-            "- CM: query directly related to construction management topics.\n"
+            "- CM: query directly related to construction management topics such as projects, documents, schedules, RFIs, submittals, and related workflows.\n"
             "- GENERAL: All other questions not related to construction management.\n\n"
+            "- NEED_MORE_CNTX: The user's latest query seems ambiguous or lacks sufficient context to classify.\n\n"
             "Use the provided CHAT HISTORY and the latest user message to determine the correct type.\n\n"
             "QUERY:\n{query}\n\n"
             "You must respond ONLY in the following strict JSON format:\n"
@@ -37,60 +43,73 @@ class QuestionClassifier:
     def build(self, checkpointer=None):
         g = StateGraph(QuestionTypeState)
         g.add_node("cm_classifier", self.cm_classifier)
+        g.add_node("general_assistant", self.general_assistant)
+        g.add_node("ask_for_more_context_node", self.ask_for_more_context)
 
         g.add_edge(START, "cm_classifier")
-        g.add_edge("cm_classifier", END)
+        g.add_conditional_edges(
+            "cm_classifier",
+            lambda s: s['question_type'],
+            {
+                self.CM: END,
+                self.GENERAL: "general_assistant",
+                self.NEED_MORE_CNTX: "ask_for_more_context_node",
+            }
+        )
+        g.add_edge("general_assistant", END)
+        g.add_edge("ask_for_more_context_node", END)
         return g.compile(checkpointer) if checkpointer is not None else g.compile()
 
     def cm_classifier(self, state: QuestionTypeState) -> QuestionTypeState:
         prompt = self.prompt.format(query=get_latest_question(state))
-        resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
 
-        question_type = QuestionType(type=self.parse_model_output(resp.content))
-        if question_type.type is None:
-            return {"question_type": "GENERAL"}
-        return {"question_type": question_type.type}
+        try:
+            resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+            question_type = QuestionType(type=self.parse_model_output(resp.content, self.VALID_TYPES))
+            chosen = getattr(question_type, "type", None)
+        except ValidationError:
+            chosen = None
+
+        if chosen not in self.VALID_TYPES:
+            chosen = self.NEED_MORE_CNTX
+
+        return {"question_type": chosen}
+    
+    def general_assistant(self, state: QuestionTypeState) -> QuestionTypeState:
+        return {
+            "messages":  AIMessage(content="I'm sorry, I can only provide assistance with Construction Management topics such as RFIs, submittals, and related workflows."), 
+            "question_type": self.GENERAL
+        }
+    
+    def ask_for_more_context(self, state: QuestionTypeState) -> QuestionTypeState:
+        prompt = (
+            "The user's latest query seems ambiguous or lacks sufficient context to classify.\n"
+            "Please ask a clarifying question to gather more details about their intent.\n\n"
+            "LATEST QUERY:\n{query}\n\n"
+            "Your clarifying question should be concise and directly related to understanding whether the query is about construction management (CM) or general topics.\n"
+        ).format(query=get_latest_question(state))
+        
+        resp = self.model.invoke([SystemMessage(content=prompt)] + state['messages'])
+                
+        return {"messages": resp.content, "question_type": self.NEED_MORE_CNTX}
     
     @staticmethod
-    def parse_model_output(text: str) -> str | None:
-        """Extract the classification type (CM|GENERAL) from an LLM response.
-
-        The model SHOULD return a JSON block like:
-            {"type": "CM"}
-
-        However, in practice the response may contain:
-        - Extra prose before/after JSON
-        - Markdown code fences ```json ... ```
-        - Multiple JSON objects
-        - Minor JSON issues like single quotes
-        - A bare label like CM or GENERAL
-
-        This function attempts to robustly extract and normalize the value.
-        Returns the upper‑cased label (CM|GENERAL) or None if not found.
-        """
+    def parse_model_output(text: str, allowed: set[str]) -> str | None:
         if not text:
             return None
 
-        allowed = {"CM", "GENERAL"}
-
-        # 1. Strip leading/trailing whitespace
         text = text.strip()
 
-        # 2. Remove surrounding markdown code fences if present
         fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, flags=re.IGNORECASE | re.DOTALL)
         if fenced:
             text = fenced.group(1).strip()
 
-        # 3. Quick path: if response is just the label
         upper_clean = text.upper()
         if upper_clean in allowed:
             return upper_clean
 
-        # 4. Find all lightweight JSON object snippets and try to parse those containing 'type'
-        # Use a non-greedy brace match; this is imperfect but usually sufficient for small structured outputs
         candidates = [m.group(0) for m in re.finditer(r"\{[^{}]*\}" , text, flags=re.DOTALL)]
 
-        # Fallback: also include larger matches if nothing small found (first balanced-ish block)
         if not candidates:
             broad = re.findall(r"\{.*?\}", text, flags=re.DOTALL)
             candidates.extend(broad[:3])  # limit attempts
@@ -99,7 +118,6 @@ class QuestionClassifier:
             try:
                 return json.loads(snippet)
             except json.JSONDecodeError:
-                # Attempt a minimal repair: replace single quotes with double IF it looks like simple JSON
                 simple = re.sub(r"'", '"', snippet)
                 try:
                     return json.loads(simple)
