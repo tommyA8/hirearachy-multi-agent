@@ -49,11 +49,7 @@ class BaseToolAgent(ABC):
         self.default_limit = int(default_limit)
         self.default_tables = default_tables or ['document_document', "company_company", "project_project"]
         self.default_table_info = self.get_db_info(self.db_docs_path, self.default_tables)
-        
-        self.qdrant = QdrantVector(
-            qdrant_url=QDRANT_URL,
-            collection_name=QDRANT_COLLECTION_NAME
-        )
+
         self._sql_prompt: str = sql_prompt
         self._answer_prompt = (
             "You are a friendly and professional Help Desk Assistant for a Construction Management (CM) system.\n\n"
@@ -231,8 +227,8 @@ class BaseToolAgent(ABC):
             return {"messages": AIMessage(content="Answer prompt not configured.")}
 
         # Process SQL Result into table
-        results = state.get("results") or ""
-        if not results.startswith("ERROR:"):
+        results = (state.get("results") or "").strip()
+        if not results.startswith("ERROR:") and results.strip():
             # Find column names in SELECT statement
             sql = state.get("generated_sql") or ""
             col_match = re.search(r"SELECT\s+(.*?)\s+FROM", sql, flags=re.S | re.I)
@@ -261,7 +257,7 @@ class BaseToolAgent(ABC):
             res = self.model.invoke([SystemMessage(content=system_prompt)] + state["messages"])
             ai_message = res if isinstance(res, AIMessage) else AIMessage(content=getattr(res, "content", ""))
         except Exception as e:
-            ai_message = AIMessage(content=f"Failed to generate answer: {e}")
+            ai_message = AIMessage(content=f"Failed to generate answer. Please try again.")
 
         return {"messages": ai_message}
 
