@@ -7,15 +7,12 @@ services:
     container_name: chatcm_app
     ports:
       - "8501:8501"
-    # GPU Support (Docker Compose v2.0+)
     deploy:
       resources:
         reservations:
           devices:
             - capabilities: [gpu]
-    environment:
-      # optional: if your app needs CUDA visible
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     env_file:
       - .env
+    volumes:
+      - ./docs/cm_db_knowledge.yaml:/app/docs/cm_db_knowledge.yaml:ro
