@@ -10,3 +10,13 @@ torchvision
 pillow
 opencv-python 
 sentence-transformers
+python-dotenv
+# dbt-postgres
+# vanna
+# 'vanna[qdrant,ollama,postgres]'
+langgraph
+fastapi
+uvicorn
+unstructured
+streamlit
+langchain-nvidia-ai-endpoints

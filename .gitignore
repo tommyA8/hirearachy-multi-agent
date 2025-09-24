@@ -1,5 +1,8 @@
 qdrant_data
-
+database/backup
+database/*
+datatransform/
+logs/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

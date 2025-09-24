@@ -1,0 +1,685 @@
+[
+  {
+    "id": "Table::auth_user",
+    "title": "Description of auth_user",
+    "content": "Table: auth_user\n        Description: N/A\n        Fields: id (INTEGER),password (VARCHAR(128)),last_login (TIMESTAMP),is_superuser (BOOLEAN),username (VARCHAR(150)),first_name (VARCHAR(150)),last_name (VARCHAR(150)),email (VARCHAR(254)),is_staff (BOOLEAN),is_active (BOOLEAN),date_joined (TIMESTAMP)\n        Relationships:None\n        ",
+    "metadata": {
+      "table": "auth_user",
+      "fields": [
+        "id",
+        "password",
+        "last_login",
+        "is_superuser",
+        "username",
+        "first_name",
+        "last_name",
+        "email",
+        "is_staff",
+        "is_active",
+        "date_joined"
+      ],
+      "related_tables": []
+    }
+  },
+  {
+    "id": "Table::company_company",
+    "title": "Description of company_company",
+    "content": "Table: company_company\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(20)),title (VARCHAR(255)),address (VARCHAR(255)),logo (VARCHAR(255)),subtitle_color (VARCHAR(15)),title_color (VARCHAR(15)),uuid (UUID),watermark (VARCHAR(255)),project_amount (INTEGER),storage_usage (BIGINT),user_amount (INTEGER),company_limit_id (BIGINT)\n        Relationships:company_company.company_limit_id \u2192 company_companylimit.id\n        ",
+    "metadata": {
+      "table": "company_company",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "address",
+        "logo",
+        "subtitle_color",
+        "title_color",
+        "uuid",
+        "watermark",
+        "project_amount",
+        "storage_usage",
+        "user_amount",
+        "company_limit_id"
+      ],
+      "related_tables": [
+        "company_companylimit"
+      ]
+    }
+  },
+  {
+    "id": "Table::company_contractor",
+    "title": "Description of company_contractor",
+    "content": "Table: company_contractor\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),title (VARCHAR(255)),code (VARCHAR(20)),description (TEXT),country (VARCHAR(100)),time_zone (VARCHAR(255)),address (VARCHAR(255)),state (VARCHAR(255)),city (VARCHAR(255)),postcode (VARCHAR(10)),latitude (VARCHAR(55)),longitude (VARCHAR(55)),zone (VARCHAR(255)),fax (VARCHAR(50)),phone (VARCHAR(50)),company_id (BIGINT),created_by_id (INTEGER),updated_by_id (INTEGER)\n        Relationships:company_contractor.company_id \u2192 company_company.id,\ncompany_contractor.created_by_id \u2192 auth_user.id,\ncompany_contractor.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "company_contractor",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "title",
+        "code",
+        "description",
+        "country",
+        "time_zone",
+        "address",
+        "state",
+        "city",
+        "postcode",
+        "latitude",
+        "longitude",
+        "zone",
+        "fax",
+        "phone",
+        "company_id",
+        "created_by_id",
+        "updated_by_id"
+      ],
+      "related_tables": [
+        "company_company",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::company_discipline",
+    "title": "Description of company_discipline",
+    "content": "Table: company_discipline\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(50)),title (VARCHAR(255)),company_id (BIGINT),created_by_id (INTEGER),updated_by_id (INTEGER),discipline_group_id (BIGINT)\n        Relationships:company_discipline.company_id \u2192 company_company.id,\ncompany_discipline.created_by_id \u2192 auth_user.id,\ncompany_discipline.discipline_group_id \u2192 company_disciplinegroup.id,\ncompany_discipline.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "company_discipline",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "company_id",
+        "created_by_id",
+        "updated_by_id",
+        "discipline_group_id"
+      ],
+      "related_tables": [
+        "company_company",
+        "auth_user",
+        "company_disciplinegroup",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::project_project",
+    "title": "Description of project_project",
+    "content": "Table: project_project\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(20)),title (VARCHAR(255)),uuid (UUID),image (VARCHAR(255)),value (NUMERIC(15, 2)),size (DOUBLE PRECISION),description (TEXT),start_date (TIMESTAMP),end_date (TIMESTAMP),company_id (BIGINT),created_by_id (INTEGER),process_id (BIGINT),project_type_id (BIGINT),updated_by_id (INTEGER),address (VARCHAR(255)),city (VARCHAR(255)),country (VARCHAR(100)),fax (VARCHAR(50)),latitude (VARCHAR(55)),longitude (VARCHAR(55)),phone (VARCHAR(50)),postcode (VARCHAR(10)),state (VARCHAR(255)),time_zone (VARCHAR(255)),zone (VARCHAR(255)),currency_id (BIGINT)\n        Relationships:project_project.company_id \u2192 company_company.id,\nproject_project.created_by_id \u2192 auth_user.id,\nproject_project.currency_id \u2192 project_currency.id,\nproject_project.process_id \u2192 company_process.id,\nproject_project.project_type_id \u2192 company_projecttype.id,\nproject_project.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "project_project",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "uuid",
+        "image",
+        "value",
+        "size",
+        "description",
+        "start_date",
+        "end_date",
+        "company_id",
+        "created_by_id",
+        "process_id",
+        "project_type_id",
+        "updated_by_id",
+        "address",
+        "city",
+        "country",
+        "fax",
+        "latitude",
+        "longitude",
+        "phone",
+        "postcode",
+        "state",
+        "time_zone",
+        "zone",
+        "currency_id"
+      ],
+      "related_tables": [
+        "company_company",
+        "auth_user",
+        "project_currency",
+        "company_process",
+        "company_projecttype",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::project_location",
+    "title": "Description of project_location",
+    "content": "Table: project_location\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),title (VARCHAR(255)),image (VARCHAR(255)),uuid (UUID),created_by_id (INTEGER),parent_id (BIGINT),project_id (BIGINT),updated_by_id (INTEGER),group_id (BIGINT),phase_id (BIGINT),type_id (BIGINT),number (VARCHAR(25)),description (TEXT),latitude (NUMERIC(10, 8)),longitude (NUMERIC(11, 8))\n        Relationships:project_location.created_by_id \u2192 auth_user.id,\nproject_location.group_id \u2192 company_locationgroup.id,\nproject_location.parent_id \u2192 project_location.id,\nproject_location.phase_id \u2192 company_locationphase.id,\nproject_location.project_id \u2192 project_project.id,\nproject_location.type_id \u2192 company_locationtype.id,\nproject_location.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "project_location",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "title",
+        "image",
+        "uuid",
+        "created_by_id",
+        "parent_id",
+        "project_id",
+        "updated_by_id",
+        "group_id",
+        "phase_id",
+        "type_id",
+        "number",
+        "description",
+        "latitude",
+        "longitude"
+      ],
+      "related_tables": [
+        "auth_user",
+        "company_locationgroup",
+        "project_location",
+        "company_locationphase",
+        "project_project",
+        "company_locationtype",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::project_specification",
+    "title": "Description of project_specification",
+    "content": "Table: project_specification\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(255)),title (VARCHAR(255)),created_by_id (INTEGER),parent_id (BIGINT),project_id (BIGINT),updated_by_id (INTEGER),number (VARCHAR(255))\n        Relationships:project_specificatio.parent_id \u2192 project_specification.id,\nproject_specification.created_by_id \u2192 auth_user.id,\nproject_specification.project_id \u2192 project_project.id,\nproject_specification.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "project_specification",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "created_by_id",
+        "parent_id",
+        "project_id",
+        "updated_by_id",
+        "number"
+      ],
+      "related_tables": [
+        "project_specification",
+        "auth_user",
+        "project_project",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_template",
+    "title": "Description of document_template",
+    "content": "Table: document_template\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),title (VARCHAR(255)),type (INTEGER),description (TEXT),active (BOOLEAN),source (JSONB),created_by_id (INTEGER),discipline_id (BIGINT),project_id (BIGINT),specification_id (BIGINT),updated_by_id (INTEGER),pdf_template_id (BIGINT)\n        Relationships:document_template.created_by_id \u2192 auth_user.id,\ndocument_template.discipline_id \u2192 company_discipline.id,\ndocument_template.pdf_template_id \u2192 pdf_template_pdftemplate.id,\ndocument_template.project_id \u2192 project_project.id,\ndocument_template.specification_id \u2192 project_specification.id,\ndocument_template.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_template",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "title",
+        "type",
+        "description",
+        "active",
+        "source",
+        "created_by_id",
+        "discipline_id",
+        "project_id",
+        "specification_id",
+        "updated_by_id",
+        "pdf_template_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "company_discipline",
+        "pdf_template_pdftemplate",
+        "project_project",
+        "project_specification",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::project_floorplan",
+    "title": "Description of project_floorplan",
+    "content": "Table: project_floorplan\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),uuid (UUID),title (VARCHAR(255)),file (VARCHAR(255)),content_type (VARCHAR(255)),thumbnail (VARCHAR(255)),created_by_id (INTEGER),location_id (BIGINT),updated_by_id (INTEGER)\n        Relationships:project_floorplan.created_by_id \u2192 auth_user.id,\nproject_floorplan.location_id \u2192 project_location.id,\nproject_floorplan.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "project_floorplan",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "uuid",
+        "title",
+        "file",
+        "content_type",
+        "thumbnail",
+        "created_by_id",
+        "location_id",
+        "updated_by_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "project_location",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::project_locationfile",
+    "title": "Description of project_locationfile",
+    "content": "Table: project_locationfile\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),uuid (UUID),content_type (VARCHAR(255)),file (VARCHAR(255)),created_by_id (INTEGER),location_id (BIGINT),updated_by_id (INTEGER),thumbnail (VARCHAR(255))\n        Relationships:project_locationfile.created_by_id \u2192 auth_user.id,\nproject_locationfile.location_id \u2192 project_location.id,\nproject_locationfile.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "project_locationfile",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "uuid",
+        "content_type",
+        "file",
+        "created_by_id",
+        "location_id",
+        "updated_by_id",
+        "thumbnail"
+      ],
+      "related_tables": [
+        "auth_user",
+        "project_location",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::inspection_test_plan_inspectiontestplan",
+    "title": "Description of inspection_test_plan_inspectiontestplan",
+    "content": "Table: inspection_test_plan_inspectiontestplan\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(25)),title (VARCHAR(255)),start_date (TIMESTAMP),is_opened (BOOLEAN),drawing_number (VARCHAR(255)),created_by_id (INTEGER),inspection_template_id (BIGINT),location_id (BIGINT),project_id (BIGINT),received_from_id (INTEGER),updated_by_id (INTEGER),wbs_id (BIGINT),responsible_contractor_id (BIGINT)\n        Relationships:inspection_test.created_by_id \u2192 auth_user.id,\ninspection_test.inspection_template_id \u2192 document_template.id,\ninspection_test.location_id \u2192 project_location.id,\ninspection_test.project_id \u2192 project_project.id,\ninspection_test.received_from_id \u2192 auth_user.id,\ninspection_test.responsible_contractor_id \u2192 company_contractor.id,\ninspection_test.updated_by_id \u2192 auth_user.id,\ninspection_test.wbs_id \u2192 inspection_test_plan_inspectiontestplan_wbs.id\n        ",
+    "metadata": {
+      "table": "inspection_test_plan_inspectiontestplan",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "start_date",
+        "is_opened",
+        "drawing_number",
+        "created_by_id",
+        "inspection_template_id",
+        "location_id",
+        "project_id",
+        "received_from_id",
+        "updated_by_id",
+        "wbs_id",
+        "responsible_contractor_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "document_template",
+        "project_location",
+        "project_project",
+        "auth_user",
+        "company_contractor",
+        "auth_user",
+        "inspection_test_plan_inspectiontestplan_wbs"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_document",
+    "title": "Description of document_document",
+    "content": "Table: document_document\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(50)),title (VARCHAR(255)),type (INTEGER),process (INTEGER),status (INTEGER),due_date (TIMESTAMP),schedule_impact (DOUBLE PRECISION),cost_impact (DOUBLE PRECISION),drawing_number (VARCHAR(255)),cycle (INTEGER),is_private (BOOLEAN),description (TEXT),created_by_id (INTEGER),discipline_id (BIGINT),location_id (BIGINT),project_id (BIGINT),specification_id (BIGINT),template_id (BIGINT),updated_by_id (INTEGER),order (INTEGER),received_from_id (INTEGER),inspection_test_plan_id (BIGINT),responsible_contractor_id (BIGINT),is_recently_rejected (BOOLEAN),floor_plan_id (BIGINT)\n        Relationships:document_document.created_by_id \u2192 auth_user.id,\ndocument_document.discipline_id \u2192 company_discipline.id,\ndocument_document.floor_plan_id \u2192 project_floorplan.id,\ndocument_document.inspection_test_plan_id \u2192 inspection_test_plan_inspectiontestplan.id,\ndocument_document.location_id \u2192 project_location.id,\ndocument_document.project_id \u2192 project_project.id,\ndocument_document.received_from_id \u2192 auth_user.id,\ndocument_document.responsible_contractor_id \u2192 company_contractor.id,\ndocument_document.specification_id \u2192 project_specification.id,\ndocument_document.template_id \u2192 document_template.id,\ndocument_document.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_document",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "type",
+        "process",
+        "status",
+        "due_date",
+        "schedule_impact",
+        "cost_impact",
+        "drawing_number",
+        "cycle",
+        "is_private",
+        "description",
+        "created_by_id",
+        "discipline_id",
+        "location_id",
+        "project_id",
+        "specification_id",
+        "template_id",
+        "updated_by_id",
+        "order",
+        "received_from_id",
+        "inspection_test_plan_id",
+        "responsible_contractor_id",
+        "is_recently_rejected",
+        "floor_plan_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "company_discipline",
+        "project_floorplan",
+        "inspection_test_plan_inspectiontestplan",
+        "project_location",
+        "project_project",
+        "auth_user",
+        "company_contractor",
+        "project_specification",
+        "document_template",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_assignee",
+    "title": "Description of document_assignee",
+    "content": "Table: document_assignee\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),order (INTEGER),due_date (TIMESTAMP),state (INTEGER),status (INTEGER),response (TEXT),response_date (TIMESTAMP),round (INTEGER),cycle (INTEGER),rejected_to (VARCHAR(20)),is_latest (BOOLEAN),is_open (BOOLEAN),is_official (BOOLEAN),created_by_id (INTEGER),document_id (BIGINT),updated_by_id (INTEGER),user_id (INTEGER)\n        Relationships:document_assignee.created_by_id \u2192 auth_user.id,\ndocument_assignee.document_id \u2192 document_document.id,\ndocument_assignee.updated_by_id \u2192 auth_user.id,\ndocument_assignee.user_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_assignee",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "order",
+        "due_date",
+        "state",
+        "status",
+        "response",
+        "response_date",
+        "round",
+        "cycle",
+        "rejected_to",
+        "is_latest",
+        "is_open",
+        "is_official",
+        "created_by_id",
+        "document_id",
+        "updated_by_id",
+        "user_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "document_document",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_documentfile",
+    "title": "Description of document_documentfile",
+    "content": "Table: document_documentfile\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),created_by_id (INTEGER),document_id (BIGINT),file (VARCHAR(255)),updated_by_id (INTEGER),uuid (UUID),content_type (VARCHAR(255)),form (JSONB),markup (VARCHAR(255)),thumbnail (VARCHAR(255))\n        Relationships:document_documentfil.document_id \u2192 document_document.id,\ndocument_documentfile.created_by_id \u2192 auth_user.id,\ndocument_documentfile.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_documentfile",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "created_by_id",
+        "document_id",
+        "file",
+        "updated_by_id",
+        "uuid",
+        "content_type",
+        "form",
+        "markup",
+        "thumbnail"
+      ],
+      "related_tables": [
+        "document_document",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_inspection",
+    "title": "Description of document_inspection",
+    "content": "Table: document_inspection\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),due_date (TIMESTAMP),status (INTEGER),response (TEXT),response_date (TIMESTAMP),round (INTEGER),cycle (INTEGER),is_latest (BOOLEAN),created_by_id (INTEGER),document_id (BIGINT),updated_by_id (INTEGER),form_id (BIGINT),max_score (DOUBLE PRECISION),score (DOUBLE PRECISION),stat (JSONB),response_user_id (INTEGER)\n        Relationships:document_inspection.created_by_id \u2192 auth_user.id,\ndocument_inspection.document_id \u2192 document_document.id,\ndocument_inspection.form_id \u2192 project_form.id,\ndocument_inspection.response_user_id \u2192 auth_user.id,\ndocument_inspection.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_inspection",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "due_date",
+        "status",
+        "response",
+        "response_date",
+        "round",
+        "cycle",
+        "is_latest",
+        "created_by_id",
+        "document_id",
+        "updated_by_id",
+        "form_id",
+        "max_score",
+        "score",
+        "stat",
+        "response_user_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "document_document",
+        "project_form",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_submittal",
+    "title": "Description of document_submittal",
+    "content": "Table: document_submittal\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),document_number (VARCHAR(155)),rev (VARCHAR(2)),due_date (TIMESTAMP),status (INTEGER),response (TEXT),response_date (TIMESTAMP),round (INTEGER),cycle (INTEGER),is_latest (BOOLEAN),created_by_id (INTEGER),document_id (BIGINT),updated_by_id (INTEGER),user_id (INTEGER),rejected_to (VARCHAR(20))\n        Relationships:document_submittal.created_by_id \u2192 auth_user.id,\ndocument_submittal.document_id \u2192 document_document.id,\ndocument_submittal.updated_by_id \u2192 auth_user.id,\ndocument_submittal.user_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_submittal",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "document_number",
+        "rev",
+        "due_date",
+        "status",
+        "response",
+        "response_date",
+        "round",
+        "cycle",
+        "is_latest",
+        "created_by_id",
+        "document_id",
+        "updated_by_id",
+        "user_id",
+        "rejected_to"
+      ],
+      "related_tables": [
+        "auth_user",
+        "document_document",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_assigneefile",
+    "title": "Description of document_assigneefile",
+    "content": "Table: document_assigneefile\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),created_by_id (INTEGER),assignee_id (BIGINT),file (VARCHAR(255)),updated_by_id (INTEGER),uuid (UUID),content_type (VARCHAR(255)),thumbnail (VARCHAR(255))\n        Relationships:document_assigneefil.assignee_id \u2192 document_assignee.id,\ndocument_assigneefile.created_by_id \u2192 auth_user.id,\ndocument_assigneefile.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_assigneefile",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "created_by_id",
+        "assignee_id",
+        "file",
+        "updated_by_id",
+        "uuid",
+        "content_type",
+        "thumbnail"
+      ],
+      "related_tables": [
+        "document_assignee",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_inspectionfile",
+    "title": "Description of document_inspectionfile",
+    "content": "Table: document_inspectionfile\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),created_by_id (INTEGER),inspection_id (BIGINT),file (VARCHAR(255)),updated_by_id (INTEGER),uuid (UUID),content_type (VARCHAR(255)),thumbnail (VARCHAR(255))\n        Relationships:document_inspectionf.inspection_id \u2192 document_inspection.id,\ndocument_inspectionfile.created_by_id \u2192 auth_user.id,\ndocument_inspectionfile.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_inspectionfile",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "created_by_id",
+        "inspection_id",
+        "file",
+        "updated_by_id",
+        "uuid",
+        "content_type",
+        "thumbnail"
+      ],
+      "related_tables": [
+        "document_inspection",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::document_submittalfile",
+    "title": "Description of document_submittalfile",
+    "content": "Table: document_submittalfile\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),created_by_id (INTEGER),submittal_id (BIGINT),file (VARCHAR(255)),updated_by_id (INTEGER),uuid (UUID),content_type (VARCHAR(255)),thumbnail (VARCHAR(255))\n        Relationships:document_submittalfi.submittal_id \u2192 document_submittal.id,\ndocument_submittalfile.created_by_id \u2192 auth_user.id,\ndocument_submittalfile.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "document_submittalfile",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "created_by_id",
+        "submittal_id",
+        "file",
+        "updated_by_id",
+        "uuid",
+        "content_type",
+        "thumbnail"
+      ],
+      "related_tables": [
+        "document_submittal",
+        "auth_user",
+        "auth_user"
+      ]
+    }
+  },
+  {
+    "id": "Table::work_order_workorder",
+    "title": "Description of work_order_workorder",
+    "content": "Table: work_order_workorder\n        Description: N/A\n        Fields: id (BIGINT),deleted (TIMESTAMP),deleted_by_cascade (BOOLEAN),created_at (TIMESTAMP),updated_at (TIMESTAMP),code (VARCHAR(50)),title (VARCHAR(255)),process (INTEGER),status (INTEGER),due_date (TIMESTAMP),is_private (BOOLEAN),description (TEXT),created_by_id (INTEGER),discipline_id (BIGINT),location_id (BIGINT),project_id (BIGINT),specification_id (BIGINT),sub_section_id (BIGINT),template_id (BIGINT),type_id (BIGINT),updated_by_id (INTEGER),received_from_id (INTEGER),responsible_contractor_id (BIGINT),cycle (INTEGER),is_recently_rejected (BOOLEAN),drawing_number (VARCHAR(255)),floor_plan_id (BIGINT),group_id (BIGINT)\n        Relationships:work_order.created_by_id \u2192 auth_user.id,\nwork_order.discipline_id \u2192 company_discipline.id,\nwork_order.floor_plan_id \u2192 project_floorplan.id,\nwork_order.group_id \u2192 work_order_workordergroup.id,\nwork_order.location_id \u2192 project_location.id,\nwork_order.project_id \u2192 project_project.id,\nwork_order.received_from_id \u2192 auth_user.id,\nwork_order.responsible_contractor_id \u2192 company_contractor.id,\nwork_order.specification_id \u2192 project_specification.id,\nwork_order.sub_section_id \u2192 document_subsection.id,\nwork_order.template_id \u2192 work_order_workordertemplate.id,\nwork_order.type_id \u2192 work_order_workordertype.id,\nwork_order.updated_by_id \u2192 auth_user.id\n        ",
+    "metadata": {
+      "table": "work_order_workorder",
+      "fields": [
+        "id",
+        "deleted",
+        "deleted_by_cascade",
+        "created_at",
+        "updated_at",
+        "code",
+        "title",
+        "process",
+        "status",
+        "due_date",
+        "is_private",
+        "description",
+        "created_by_id",
+        "discipline_id",
+        "location_id",
+        "project_id",
+        "specification_id",
+        "sub_section_id",
+        "template_id",
+        "type_id",
+        "updated_by_id",
+        "received_from_id",
+        "responsible_contractor_id",
+        "cycle",
+        "is_recently_rejected",
+        "drawing_number",
+        "floor_plan_id",
+        "group_id"
+      ],
+      "related_tables": [
+        "auth_user",
+        "company_discipline",
+        "project_floorplan",
+        "work_order_workordergroup",
+        "project_location",
+        "project_project",
+        "auth_user",
+        "company_contractor",
+        "project_specification",
+        "document_subsection",
+        "work_order_workordertemplate",
+        "work_order_workordertype",
+        "auth_user"
+      ]
+    }
+  }
+]
