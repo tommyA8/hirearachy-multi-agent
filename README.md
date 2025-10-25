@@ -2,6 +2,10 @@
 
 ChatCM is an agentic workflow that classifies user queries, checks tool permissions, retrieves structured schema knowledge, generates safe read‑only SQL, executes it, and returns concise, user‑friendly answers for Construction Management (CM) features (RFI, Submittal, Inspection).
 
+## Demo
+
+![streamlit demo](assets/chatcm_demo.png)
+
 ## Architecture
 
 High‑level LangGraph workflow (auto‑generated):
