@@ -9,7 +9,7 @@ High‑level LangGraph workflow (auto‑generated):
 ![ChatCM Agent Graph](assets/chatcm_agentic_graph.png)
 
 Flow:
-1. `classifier_node` → Classify query as CM / GENERAL / NEED_MORE_CNTX via [`QuestionClassifier`](agents/question_classifier.py).
+1. `classifier_node` → Classify query as CM / GENERAL via [`QuestionClassifier`](agents/question_classifier.py).
 2. If CM → `get_tool_permissions_node` loads user tool permissions.
 3. `supervisor_node` ([`CMSupervisor`](agents/cm_supervisor.py)) routes to RFI / SUBMITTAL / INSPECTION or returns fallback (NON_CM_TOOL / NEED_MORE_CNTX / NO_VALID).
 4. Tool node (`rfi_node`, `submittal_node`, `inspection_node`) runs a 3‑step internal SQL subgraph (generate SQL → execute → answer) implemented in [`BaseToolAgent`](agents/cm_tool_agent.py) / specialized agents (`RFIAgent`, `SubmittalAgent`, `InspectionAgent`).
@@ -19,7 +19,7 @@ Flow:
 
 | Responsibility | Implementation |
 | -------------- | -------------- |
-| Orchestration graph | [`ChatCM`](workflows/chat_cm.py) + [`chatcm_agent`](workflows/chat_cm.py) |
+| Orchestration graph | [`ChatCM`](workflows/chat_cm.py)
 | Query type classification | [`QuestionClassifier`](agents/question_classifier.py) |
 | CM tool routing & permission gate | [`CMSupervisor`](agents/cm_supervisor.py) |
 | SQL generation + execution + NL answer | [`BaseToolAgent`](agents/cm_tool_agent.py) & registered agents (`RFIAgent`, `SubmittalAgent`, `InspectionAgent`) |
